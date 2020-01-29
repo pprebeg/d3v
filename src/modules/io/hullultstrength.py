@@ -4,6 +4,9 @@ from geometry import Geometry
 import openmesh as om
 import os
 import numpy as np
+import readxml
+import geofem
+import csv
 
 class HullUltStrengthImporter(IOHandler):
     def __init__(self):
@@ -16,9 +19,10 @@ class HullUltStrengthImporter(IOHandler):
         filename, file_extension = os.path.splitext(fileName)
         if file_extension != ".hus":
             return
-        dbb=HullUltStrength(fileName)
-        g = Geometry()
-        g.mesh = dbb.getmesh()
+        hus=HullUltStrength(fileName)
+        #g = Geometry()
+        #g.mesh = hus.getmesh()
+        g = hus.readModel()
         Signals.get().geometryImported.emit(g)
 
     def getImportFormats(self):
@@ -32,9 +36,10 @@ class HullUltStrength ():
     def __init__(self,fileName):
         self.filename = fileName
     def getmesh(self):
-        m=self.test
+        #m=self.test
+        m=self.readModel()
         return m
-    @property
+
     def test(self):
         mesh= om.TriMesh()
         vhandle = [0]*100
@@ -166,10 +171,23 @@ class HullUltStrength ():
         print(mesh.n_faces())
         return mesh
         pass
-    def hullformmesh(self):
-        mesh= om.TriMesh()
-        #read self.filename
-        return mesh
-        pass
+
+    def readModel(self):
+        with open(self.filename, newline='') as csvfile:
+            hfr = csv.reader(csvfile, delimiter='\t', quotechar='|')
+            data=[]
+            for row in hfr:
+                rown=[]
+                for x in row:
+                    rown.append(x)
+                data.append(rown)
+        xmlfile = data[0][1]
+        abspath = '\\'.join(self.filename.split('\\')[0:-1])
+        abspath = abspath + '\\' + xmlfile
+        fem = geofem.GeoFEM()
+        m = readxml.MaestroXML(abspath)
+        m.readModelToGeoFEM(fem)
+        fem.regenerate()
+        return fem
 
 
