@@ -35,8 +35,9 @@ class HullForm ():
         self.filename = fileName
         self.testcalc()
     def getmesh(self):
-        m=self.test()
-        m=self.onCreateBox()
+        #m=self.test()
+        #m=self.onCreateBox()
+        m=self.readShipData()
         return m
     def test(self):
         mesh= om.TriMesh()
