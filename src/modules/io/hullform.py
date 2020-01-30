@@ -106,16 +106,20 @@ class HullForm ():
                 #print(', '.join(row))
         pass
 
-    def hullGen(self,shipdata: dict, pdecks: list):
+    def getDistribution(self, maxv, minv, n, pot):
+        x = [0.0] * n
+        for i in range(n):
+            fi = float(i)
+            fn1 = float(n - 1)
+            x[i] = fi ** pot / fn1 ** pot * (maxv - minv) + minv
+        x.reverse()
+        return x
+    def hullGen(shipdata: dict, pdecks: list, nump):
         # gs is the grid size of a cell, in pixels
         # Reminder to make gridsize scaled to the screen width
-        gs = 5
-
-        # gsm is the cell size in meters
-        gsm = 0.5
         # Sets hullform data to slider values
-        shipdata["loa_val"] = round(shipdata["loa_val"] / gsm) * gsm
-        shipdata["boa_val"] = round(shipdata["boa_val"] / gsm) * gsm;
+        shipdata["loa_val"] = shipdata["loa_val"]
+        shipdata["boa_val"] = shipdata["boa_val"]
 
         #
         midshipsM = shipdata["ms_val"]  # Constant m in JC equation
@@ -188,41 +192,35 @@ class HullForm ():
 
         deckOutlinesHull = []  # Array with hull deck outline x, y coordinates
         # Get y points for every x
-        for j in range(len(midBeam)):  # For each deck in hull
+        for idk in range(len(midBeam)):  # For each deck in hull
             deckOutlinesHull.append([])  # For each deck create array
-            if pdecks2[j] != 0:  # If not keel
-                if transomBeam[j] > 0:  # Add vertical hull line at transom
-                    deckOutlinesHull[j].append([Math.ceil((aftEnd[j]) / gsm) * gsm * (gs / gsm), 0])
+            if pdecks2[idk] != 0:  # If not keel
+                if transomBeam[idk] > 0:  # Add vertical hull line at transom
+                    deckOutlinesHull[idk].append([aftEnd[idk], 0])
+                kmin = aftEnd[idk]
+                kmax = shipdata["loa_val"] / 2
+                klist = np.linspace(kmin, kmax, nump)
+                for xpt in klist:
+                    deckOutlinesHull[idk].append([xpt, (
+                                Math.sqrt(Math.pow(ogiveRadius[idk], 2) - Math.pow(xpt - shipdata["loa_val"] / 2, 2)) +
+                                noseConeBaseRadius[idk] - ogiveRadius[idk] + transomBeam[idk])])
 
-                # k=Math.ceil((aftEnd[j])/gsm)*gsm; k<Math.round((shipset[0].LOA/2)/gsm)*gsm; k+=gsm
-                kmin = Math.ceil((aftEnd[j]) / gsm) * gsm
-                kmax = round((shipdata["loa_val"] / 2) / gsm) * gsm
-                step = gsm
-                klist = np.arange(kmin, kmax, step)
-                for k in klist:  # k=Math.ceil((aftEnd[j])/gsm)*gsm; k<round((shipdata["loa_val"]/2)/gsm)*gsm; k+=gsm:     #For aft half of each deck in the hull
-                    deckOutlinesHull[j].append([k * (gs / gsm), (
-                                Math.sqrt(Math.pow(ogiveRadius[j], 2) - Math.pow(k - shipdata["loa_val"] / 2, 2)) +
-                                noseConeBaseRadius[j] - ogiveRadius[j] + transomBeam[j]) * (gs / gsm)])
-
-                kmin = round((shipdata["loa_val"] / 2) / gsm) * gsm
-                kmax = (keelFwd + bowRake[j])
-                step = gsm
-                klist = np.arange(kmin, kmax, step)
-                for k in klist:  # (k=round((shipdata["loa_val"]/2)/gsm)*gsm; k<=(keelFwd + bowRake[j]); k+=gsm):  #For forward half of each deck in the hull
-                    eqX = (k - shipdata["loa_val"] / 2) / (
-                                keelFwd + bowRake[j] - (shipdata["loa_val"] / 2))  # Value of x in JC equation
-                    deckOutlinesHull[j].append([k * (gs / gsm), (1 - (
-                                (Math.cosh(eqX * fwdDeckMArray[j] * Math.pi) - 1) / (
-                                    Math.cosh(fwdDeckMArray[j] * Math.pi) - 1))) * midBeam[j] * (gs / gsm)])
+                kmin = shipdata["loa_val"] / 2
+                kmax = keelFwd + bowRake[idk]
+                klist = np.linspace(kmin, kmax, nump)
+                for xpt in klist:
+                    eqX = (xpt - shipdata["loa_val"] / 2) / (
+                                keelFwd + bowRake[idk] - (shipdata["loa_val"] / 2))  # Value of x in JC equation
+                    deckOutlinesHull[idk].append([xpt, (1 - ((Math.cosh(eqX * fwdDeckMArray[idk] * Math.pi) - 1) / (
+                                Math.cosh(fwdDeckMArray[idk] * Math.pi) - 1))) * midBeam[idk]])
 
 
             else:  # If keel draw top
-                kmin = Math.ceil((aftEnd[j]) / gsm) * gsm
-                kmax = (keelFwd + bowRake[j])
-                step = gsm
-                klist = np.arange(kmin, kmax, step)
-                for k in klist:  # k=Math.ceil((aftEnd[j])/gsm)*gsm; k<=(keelFwd + bowRake[j]) k+=gsm:
-                    deckOutlinesHull[j].append([k * (gs / gsm), 0])  # Straight line
+                kmin = aftEnd[idk]
+                kmax = (keelFwd + bowRake[idk])
+                klist = np.linspace(kmin, kmax, nump * 2)
+                for xpt in klist:
+                    deckOutlinesHull[idk].append([xpt, 0])  # Straight line
 
         deckOutlinesS = []  # Array with superstructure deck outline x, y coordinates
         tumblehome = []  # Superstructure tumblehome
@@ -230,47 +228,47 @@ class HullForm ():
             deckOutlinesS.append([])  # For each deck create array
             tumblehome = (pdecks3[n] - shipdata["draft_val"]) * Math.tan(
                 slope)  # Calculate tumblehome y offset to subtract below
-            deckOutlinesS[n].append(
-                [Math.ceil((aftEndS[n]) / gsm) * gsm * (gs / gsm), 0])  # Add vertical hull line at transom
+            deckOutlinesS[n].append([aftEndS[n], 0])  # Add vertical hull line at transom
 
-            kmin = Math.ceil((aftEndS[n]) / gsm) * gsm
-            kmax = round((shipdata["loa_val"] / 2) / gsm) * gsm
-            step = gsm
-            klist = np.arange(kmin, kmax, step)
-            for k in klist:  # (k=Math.ceil((aftEndS[n])/gsm)*gsm; k<round((shipdata["loa_val"]/2)/gsm)*gsm; k+=gsm): #For aft half of each deck in the superstructure (same equation as above with tumblehome y offset subtracted)
-                deckOutlinesS[n].append([k * (gs / gsm), (
-                            Math.sqrt(Math.pow(ogiveRadius[0], 2) - Math.pow(k - shipdata["loa_val"] / 2, 2)) +
-                            noseConeBaseRadius[0] - ogiveRadius[0] + transomBeam[0] - tumblehome) * (gs / gsm)])
+            kmin = aftEndS[n]
+            kmax = shipdata["loa_val"] / 2
+            klist = np.linspace(kmin, kmax, nump)
+            for xpt in klist:
+                deckOutlinesS[n].append([xpt, (
+                            Math.sqrt(Math.pow(ogiveRadius[0], 2) - Math.pow(xpt - shipdata["loa_val"] / 2, 2)) +
+                            noseConeBaseRadius[0] - ogiveRadius[0] + transomBeam[0] - tumblehome)])
 
-            kmin = round((shipdata["loa_val"] / 2) / gsm) * gsm
+            kmin = shipdata["loa_val"] / 2
             kmax = (keelFwd + bowRakeS[n])
-            step = gsm
-            klist = np.arange(kmin, kmax, step)
-            for k in klist:  # (k=round((shipdata["loa_val"]/2)/gsm)*gsm; k<=(keelFwd + bowRakeS[n]); k+=gsm): #For forward half of each deck in the superstructure (same equation as above with tumblehome y offset subtracted)
-                eqX = (k - shipdata["loa_val"] / 2) / (
+            klist = np.linspace(kmin, kmax, nump)
+            for xpt in klist:
+                eqX = (xpt - shipdata["loa_val"] / 2) / (
                             keelFwd + bowRakeS[n] - (shipdata["loa_val"] / 2))  # Value of x in JC equation
-                deckOutlinesS[n].append([k * (gs / gsm), (1 - ((Math.cosh(eqX * fwdDeckMArray[0] * Math.pi) - 1) / (
-                            Math.cosh(fwdDeckMArray[0] * Math.pi) - 1))) * (midBeam[0] - tumblehome) * (gs / gsm)])
+                deckOutlinesS[n].append([xpt, (1 - ((Math.cosh(eqX * fwdDeckMArray[0] * Math.pi) - 1) / (
+                            Math.cosh(fwdDeckMArray[0] * Math.pi) - 1))) * (midBeam[0] - tumblehome)])
+
 
         wlinesPos = []
         wlinesNeg = []
         wlKeel = []
 
         for ii in range(len(deckOutlinesHull)):
-            wlineP = list()
-            wlineN = list()
+
             if pdecks2[ii] != 0:
+                wlineP = list()
+                wlineN = list()
                 for item in deckOutlinesHull[ii]:
                     p = np.array([item[0], item[1], pdecks2[ii]])
                     wlineP.append(p)
                     p = np.array([item[0], -item[1], pdecks2[ii]])
                     wlineN.append(p)
+                wlinesPos.append(wlineP)
+                wlinesNeg.append(wlineN)
             else:
                 for item in deckOutlinesHull[ii]:
                     p = np.array([item[0], item[1], pdecks2[ii]])
                     wlKeel.append(p)
-            wlinesPos.append(wlineP)
-            wlinesNeg.append(wlineN)
+
         for ii in range(len(deckOutlinesS)):
             wlineP = list()
             wlineN = list()
@@ -278,8 +276,19 @@ class HullForm ():
                 p = np.array([item[0], item[1], pdecks2[ii]])
                 wlineP.append(p)
                 p = np.array([item[0], -item[1], pdecks2[ii]])
+                wlineN.append(p)
             wlinesPos.append(wlineP)
             wlinesNeg.append(wlineN)
+
+        with open("points.txt", "w") as f:
+            for point in wlKeel:
+                f.write(str(point) + "\n")
+            for wline in wlinesNeg:
+                for point in wline:
+                    f.write(str(point) + "\n")
+            for wline in wlinesPos:
+                for point in wline:
+                    f.write(str(point) + "\n")
 
         return [wlinesPos,wlinesNeg,wlKeel]
 
@@ -354,10 +363,9 @@ class HullForm ():
             splitdata = str(shipset['BHPos']).split(" ")
             for dp in splitdata:
                 pbulkheads.append(float(dp))
-        vlines = getDistribution(pdecks[0], pdecks[len(pdecks) - 1], 10, 3)
+        vlines = self.getDistribution(pdecks[0], pdecks[len(pdecks) - 1], 10, 3)
         # vlines= np.linspace(pdecks[0],pdecks[len(pdecks)-1],10)
-
         # hullgen.hullGen(shipdata,pdecks)
-        self.hullGen(shipdata,vlines)
+        self.hullGen(shipdata, vlines, 30)
 
 
