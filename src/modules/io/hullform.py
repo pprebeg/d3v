@@ -33,12 +33,23 @@ def createIOHandler():
 class HullForm ():
     def __init__(self,fileName):
         self.filename = fileName
-        self.testcalc()
     def getmesh(self):
         #m=self.test()
         #m=self.onCreateBox()
-        m=self.readShipData()
+        result =self.readShipData()
+        m= self.genHullFormMesh(result)
         return m
+    def genHullFormMesh(self,lines:list):
+        m= om.TriMesh()
+        wlinesPos = lines[0] # positive y waterlines
+        wlinesNeg = lines[1] # negative y waerlines
+        wlKeel = lines[2]    # keel waterline (one waterline)
+
+        # the first waterline in wlinesPos is the on with the highest z
+        # the last waterline in wlinesPos is the on with the lowest z
+
+        return m
+
     def test(self):
         mesh= om.TriMesh()
         vhandle = []
@@ -60,11 +71,6 @@ class HullForm ():
         vh_list = [vhandle[2], vhandle[1], vhandle[4]]
         fh3 = mesh.add_face(vh_list)
 
-        return mesh
-        pass
-    def hullformmesh(self):
-        mesh= om.TriMesh()
-        #read self.filename
         return mesh
         pass
     def onCreateBox(self):
@@ -95,6 +101,7 @@ class HullForm ():
         mesh.add_face([p1, p7, p3])
 
         return  mesh
+
     def testcalc(self):
         with open(self.filename, newline='') as csvfile:
             hfr = csv.reader(csvfile, delimiter='\t', quotechar='|')
@@ -115,7 +122,8 @@ class HullForm ():
             x[i] = fi ** pot / fn1 ** pot * (maxv - minv) + minv
         x.reverse()
         return x
-    def hullGen(shipdata: dict, pdecks: list, nump):
+
+    def hullGen(self, shipdata: dict, pdecks: list, nump):
         # gs is the grid size of a cell, in pixels
         # Reminder to make gridsize scaled to the screen width
         # Sets hullform data to slider values
@@ -253,6 +261,17 @@ class HullForm ():
         wlinesNeg = []
         wlKeel = []
 
+        for ii in range(len(deckOutlinesS)):
+            wlineP = list()
+            wlineN = list()
+            for item in deckOutlinesS[ii]:
+                p = np.array([item[0], item[1], pdecks3[ii]])
+                wlineP.append(p)
+                p = np.array([item[0], -item[1], pdecks3[ii]])
+                wlineN.append(p)
+            wlinesPos.append(wlineP)
+            wlinesNeg.append(wlineN)
+
         for ii in range(len(deckOutlinesHull)):
 
             if pdecks2[ii] != 0:
@@ -270,34 +289,13 @@ class HullForm ():
                     p = np.array([item[0], item[1], pdecks2[ii]])
                     wlKeel.append(p)
 
-        for ii in range(len(deckOutlinesS)):
-            wlineP = list()
-            wlineN = list()
-            for item in deckOutlinesS[ii]:
-                p = np.array([item[0], item[1], pdecks2[ii]])
-                wlineP.append(p)
-                p = np.array([item[0], -item[1], pdecks2[ii]])
-                wlineN.append(p)
-            wlinesPos.append(wlineP)
-            wlinesNeg.append(wlineN)
-
-        with open("points.txt", "w") as f:
-            for point in wlKeel:
-                f.write(str(point) + "\n")
-            for wline in wlinesNeg:
-                for point in wline:
-                    f.write(str(point) + "\n")
-            for wline in wlinesPos:
-                for point in wline:
-                    f.write(str(point) + "\n")
-
         return [wlinesPos,wlinesNeg,wlKeel]
 
     def readShipData(self):
         shipdata = {}
         pdecks = []
         pbulkheads = []
-        with open('shipd.csv', newline='') as csvfile:
+        with open(self.filename, newline='') as csvfile:
             f = csv.DictReader(csvfile)
             shipset = 0
             for row in f:  # there is only one row after header row!!!!!
@@ -367,6 +365,7 @@ class HullForm ():
         vlines = self.getDistribution(pdecks[0], pdecks[len(pdecks) - 1], 10, 3)
         # vlines= np.linspace(pdecks[0],pdecks[len(pdecks)-1],10)
         # hullgen.hullGen(shipdata,pdecks)
-        self.hullGen(shipdata, vlines, 30)
+        return self.hullGen(shipdata, vlines, 30)
+
 
 
