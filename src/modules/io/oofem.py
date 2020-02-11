@@ -17,9 +17,8 @@ class OOFEMImporter(IOHandler):
         if file_extension != ".in":
             return
         oofem=OOFEM(fileName)
-        #g = Geometry()
-        #g.mesh =
-        oofem.getmesh()
+        g = Geometry()
+        g.mesh =oofem.getmesh()
         Signals.get().geometryImported.emit(g)
 
     def getImportFormats(self):
@@ -46,6 +45,7 @@ class OOFEM (Geometry):
         # mesh = self.oofemmesh()
         self.mesh = self.oofemmesh()
 
+        return self.mesh
 
     def pokusaj2(self):
         #prvaTocka=[0,0,0]
@@ -241,7 +241,7 @@ class OOFEM (Geometry):
         f = open(self.filename, newline='')
         all_vertices = {}
         all_face_handles = {}
-        plateElementTypes={"dktplate","mitc4shell"}
+        plateElementTypes={"dktplate","mitc4shell","planestress2d","trplanestress2d","trplanestressrotallman","trplanestrrot"}
 
         for line in f:
             line = ' '.join(line.split())
@@ -251,61 +251,30 @@ class OOFEM (Geometry):
             #print(sline[0].lower())
             if sline[0] == "node":
                 d = [float(sline[4]), float(sline[5]), float(sline[6])]
-                all_vertices[sline[1]] = mesh.add_vertex(d)
+                all_vertices[sline[1]] = d
             elif  sline[0].lower() in plateElementTypes:
                 id=int(sline[1])
                 elementFaceHandles=[]
                 self.element2Face[id]=elementFaceHandles
                 numNodes=int(sline[3])
                 if numNodes >= 3:
-                    #fh=mesh.add_face(vh_list)
-                    #self.all_face_handles[fh] = int(sline[1])
-                    #elementFaceHandles.append(fh)
+                    vh_list = [mesh.add_vertex(all_vertices.get(sline[4])), mesh.add_vertex(all_vertices.get(sline[5])),
+                               mesh.add_vertex(all_vertices.get(sline[6]))]
+                    fh=mesh.add_face(vh_list)
+                    self.all_face_handles[fh] = int(sline[1])
+                    elementFaceHandles.append(fh)
                     pass
                     if numNodes == 4:
+                        vh_list = [mesh.add_vertex(all_vertices.get(sline[6])), mesh.add_vertex(all_vertices.get(sline[7])),
+                                   mesh.add_vertex(all_vertices.get(sline[4]))]
+                        fh = mesh.add_face(vh_list)
+                        self.all_face_handles[fh] = int(sline[1])
+                        elementFaceHandles.append(fh)
                         pass
-                    else:
-                        # unhandled type of the element
-                        pass
+                else:
+                    print ("unhandled type of the element")
+                    pass
 
-            elif sline[0].lower() == "dktplate":
-                vh_list = [all_vertices.get(sline[4]), all_vertices.get(sline[5]),
-                           all_vertices.get(sline[6])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[1]
-                #mesh.add_face(vh_list)
-            elif sline[0].lower() == "mitc4shell":
-                vh_list = [all_vertices.get(sline[4]), all_vertices.get(sline[5]),
-                           all_vertices.get(sline[6])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[1]
-                #mesh.add_face(vh_list)
-                vh_list = [all_vertices.get( sline[6]), all_vertices.get(sline[7]),
-                           all_vertices.get(sline[4])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[1]
-                #mesh.add_face(vh_list)
-            elif sline[0].lower() == "planestress2d":
-                vh_list = [all_vertices.get(sline[4]), all_vertices.get(sline[5]),
-                           all_vertices.get(sline[6])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[1]
-                #mesh.add_face(vh_list)
-                vh_list = [all_vertices.get(sline[6]), all_vertices.get(sline[7]),
-                           all_vertices.get(sline[4])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[1]
-            elif sline[0].lower() == "trplanestress2d":
-                vh_list = [all_vertices.get(sline[4]), all_vertices.get(sline[5]),
-                           all_vertices.get(sline[6])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[4]
-                #mesh.add_face(vh_list)
-            elif sline[0].lower() == "trplanestressrotallman":
-                vh_list = [all_vertices.get(sline[4]), all_vertices.get(sline[5]),
-                           all_vertices.get(sline[6])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[4]
-                #mesh.add_face(vh_list)
-            elif sline[0].lower() == "trplanestrrot":
-                vh_list = [all_vertices.get(sline[4]), all_vertices.get(sline[5]),
-                           all_vertices.get(sline[6])]
-                all_face_handles[mesh.add_face(vh_list)] = sline[4]
-                #mesh.add_face(vh_list)
-        print(all_face_handles)
         return mesh
         pass
 
