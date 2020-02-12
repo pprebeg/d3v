@@ -1,51 +1,19 @@
-from iohandlers import IOHandler
-from signals import Signals
 from geometry import Geometry
 import openmesh as om
-import os
 import numpy as np
 
-class OOFEMImporter(IOHandler):
-    def __init__(self):
-        super().__init__()
-        Signals.get().importGeometry.connect(self.importGeometry)
 
-    def importGeometry(self, fileName):
-        if len(fileName) < 1:
-            return
-        filename, file_extension = os.path.splitext(fileName)
-        if file_extension != ".in":
-            return
-        oofem=OOFEM(fileName)
-        g = Geometry()
-        g.mesh =oofem.getmesh()
-        Signals.get().geometryImported.emit(g)
-
-    def getImportFormats(self):
-        return []
-
-
-def createIOHandler():
-    return OOFEMImporter()
 
 class OOFEM (Geometry):
-    def __init__(self,fileName):
+    def __init__(self,fileName, guid = None):
+        super().__init__(guid)
         self.filename=fileName
         self.all_face_handles = {} # key=faceHandle, value = element ID
         self.element2Face = {}     # key=element ID, value = [faceHandle1,...faceHandlex]
 
 
-    def getmesh(self):
-        #mesh=self.test()
-        #mesh = self.test2()
-
-        #mesh = self.pokusaj1()
-        #mesh = self.pokusaj2()
-
-        # mesh = self.oofemmesh()
+    def genMesh(self):
         self.mesh = self.oofemmesh()
-
-        return self.mesh
 
     def pokusaj2(self):
         #prvaTocka=[0,0,0]
@@ -183,57 +151,6 @@ class OOFEM (Geometry):
         return mesh
         pass
 
-    def test(self):
-        mesh= om.TriMesh()
-        vhandle = [0]*5
-        data = np.array([0, 1, 0])
-        vhandle[0] = mesh.add_vertex(data)
-        #vhandle.append(mesh.add_vertex(data))
-        data = np.array([1, 0, 0])
-        vhandle[1] = mesh.add_vertex(data)
-        data = np.array([2, 1, 0])
-        vhandle[2] = mesh.add_vertex(data)
-        data = np.array([0, -1, 0])
-        vhandle[3] = mesh.add_vertex(data)
-        data = np.array([2, -1, 0])
-        vhandle[4] = mesh.add_vertex(data)
-
-        fh0 = mesh.add_face(vhandle[0], vhandle[1], vhandle[2])
-        fh1 = mesh.add_face(vhandle[1], vhandle[3], vhandle[4])
-        fh2 = mesh.add_face(vhandle[0], vhandle[3], vhandle[1])
-
-        vh_list = [vhandle[2], vhandle[1], vhandle[4]]
-        fh3 = mesh.add_face(vh_list)
-
-
-        return mesh
-        pass
-    def test2(self):
-        mesh = om.TriMesh()
-        # m --> min, M --> max
-        # yapf: disable
-        p0 = mesh.add_vertex([-1, -1, -1])
-        p1 = mesh.add_vertex([-1, -1,  1])
-        p2 = mesh.add_vertex([-1,  1, -1])
-        p3 = mesh.add_vertex([-1,  1,  1])
-        p4 = mesh.add_vertex([ 1, -1, -1])
-        p5 = mesh.add_vertex([ 1, -1,  1])
-        p6 = mesh.add_vertex([ 1,  1, -1])
-        p7 = mesh.add_vertex([ 1,  1,  1])
-        # yapf: enable
-
-        mesh.add_face([p0, p6, p4])
-        mesh.add_face([p0, p2, p6])
-        mesh.add_face([p0, p4, p5])
-        mesh.add_face([p0, p5, p1])
-        mesh.add_face([p0, p3, p2])
-        mesh.add_face([p0, p1, p3])
-        mesh.add_face([p6, p2, p3])
-        mesh.add_face([p6, p3, p7])
-        mesh.add_face([p4, p7, p5])
-        mesh.add_face([p4, p6, p7])
-        mesh.add_face([p1, p5, p7])
-        mesh.add_face([p1, p7, p3])
 
     def oofemmesh(self):
         mesh = om.TriMesh()
@@ -274,8 +191,26 @@ class OOFEM (Geometry):
                 else:
                     print ("unhandled type of the element")
                     pass
-
+        self.showFaceColor()
         return mesh
+
+    def showFaceColor(self):
+        mesh= self.mesh
+        mesh.request_face_colors()
+
+        for el in self.element2Face:
+            for fh in self.element2Face[el]:
+                mesh.set_color(fh, [1, 0, 0, 1])
+            pass
+        pass
+    def showVertexColor(self):
+        mesh = self.mesh
+        mesh.request_face_colors()
+        for el in self.element2Face:
+            for fh in self.element2Face[el]:
+
+                mesh.set_color(fh, [0, 0.5, 1, 1])
+            pass
         pass
 
 

@@ -71,8 +71,8 @@ class BasicPainter(Painter):
         super().paintGL()
         self.glf.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.glf.glEnable(GL.GL_DEPTH_TEST)
-        self.glf.glEnable(GL.GL_CULL_FACE)
-        #self.glf.glDisable(GL.GL_CULL_FACE)
+        #self.glf.glEnable(GL.GL_CULL_FACE)
+        self.glf.glDisable(GL.GL_CULL_FACE)
         self.program.bind()
         for key, value in self._dentsvertsdata.items():
             value.drawvao(self.glf)
