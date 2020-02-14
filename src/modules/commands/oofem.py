@@ -1,3 +1,5 @@
+import random
+
 from geometry import Geometry
 import openmesh as om
 import numpy as np
@@ -153,6 +155,7 @@ class OOFEM (Geometry):
 
 
     def oofemmesh(self):
+
         mesh = om.TriMesh()
         self.mesh=mesh
         f = open(self.filename, newline='')
@@ -191,26 +194,102 @@ class OOFEM (Geometry):
                 else:
                     print ("unhandled type of the element")
                     pass
-        self.showFaceColor()
+        self.showFaceColorC()
+        #self.showFaceColorP()
         return mesh
+    def getPropIDforElID(self,elID):
+        propID=0
+        elementId_color_dict = {
+            1: 0,
+            2: 1,
+            3: 2,
+            4: 2,
+            5: 5,
+            6: 0,
+            7: 1,
+            8: 2,
+            9: 5,
+            10: 20,
+        }
+        n=elID
+        while n > 10:
+            n=n-10
+        propID=elementId_color_dict[n]
+        return propID
 
-    def showFaceColor(self):
+    def getElResult(self,elID,numEl):
+        retVal=0
+        retVal=random.uniform(0, 1)
+        return  retVal
+
+    def showFaceColorP(self):
+        colors = [[139,0,0,255],[220,20,60,255],[255,0,0,255],[255,20,147,255],[255,105,180,255],[255,192,203,255],[255,182,193,255],[0,100,0,255],[46,139,87,255],[143,188,143,255],[50,205,50,255],[0,255,0,255],[152,251,152,255],[0,0,139,255],[0,0,255,255],[65,105,225,255],[30,144,255,255],[0,191,255,255],[135,206,235,255],[173,216,230,255]]
+        floatColors = []
+        for color in colors:
+            floatColors.append([x / 255 for x in color])
+        print(floatColors)
+
         mesh= self.mesh
         mesh.request_face_colors()
 
         for el in self.element2Face:
+            idProp=self.getPropIDforElID(el)
             for fh in self.element2Face[el]:
-                mesh.set_color(fh, [1, 0, 0, 1])
+                #mesh.set_color(fh, floatColors[elementId_color_dict.get(el % 20)])
+                #mesh.set_color(fh, self.getContinuousColor(random.uniform(0, 1), 0, 1))
+                if el % 20 == 0:
+                    mesh.set_color(fh, floatColors[19])
+                else:
+                    mesh.set_color(fh, floatColors[(el % 20) - 1])
             pass
         pass
+    def showFaceColorC(self):
+        mesh= self.mesh
+        mesh.request_face_colors()
+
+        for el in self.element2Face:
+            val = self.getElResult(el, len(self.element2Face))
+            for fh in self.element2Face[el]:
+                color=self.getContinuousColor(val, 0, 1)
+                mesh.set_color(fh, color)
+            pass
+        pass
+
     def showVertexColor(self):
         mesh = self.mesh
         mesh.request_face_colors()
         for el in self.element2Face:
             for fh in self.element2Face[el]:
-
-                mesh.set_color(fh, [0, 0.5, 1, 1])
+                iv=0
+                for vh in mesh.fv(fh):
+                    mesh.set_color(vh, [0, 0.5, 1, 1])
+                    iv=iv+1
             pass
         pass
+
+    def getContinuousColor(self, v, vmin, vmax):
+        color = [1, 1, 1, 1]
+        if v < vmin:
+            v = vmin
+        if v > vmax:
+            v = vmax
+        dv = vmax - vmin
+
+        if (v < (vmin + 0.25 * dv)):
+            color[0] = 0
+            color[1] = 4 * (v - vmin) / dv
+        elif (v < (vmin + 0.5 * dv)):
+            color[0] = 0
+            color[2] = 1 + 4 * (vmin + 0.25 * dv - v) / dv
+        elif (v < (vmin + 0.75 * dv)):
+            color[0] = 4 * (v - vmin - 0.5 * dv) / dv
+            color[2] = 0
+        else:
+            color[1] = 1 + 4 * (vmin + 0.75 * dv - v) / dv
+            color[2] = 0
+        print(color)
+        return color
+
+
 
 
