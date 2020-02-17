@@ -12,6 +12,18 @@ class OOFEM (Geometry):
         self.filename=fileName
         self.all_face_handles = {} # key=faceHandle, value = element ID
         self.element2Face = {}     # key=element ID, value = [faceHandle1,...faceHandlex]
+        self.elementId_color_dict = {
+            1: 0,
+            2: 3,
+            3: 13,
+            4: 7,
+            5: 0,
+            6: 11,
+            7: 13,
+            8: 15,
+            9: 0,
+            10: 0
+        }
 
 
     def genMesh(self):
@@ -194,27 +206,15 @@ class OOFEM (Geometry):
                 else:
                     print ("unhandled type of the element")
                     pass
-        self.showFaceColorC()
-        #self.showFaceColorP()
+        #self.showFaceColorC()
+        self.showFaceColorP()
+        #self.showVertexColor()
         return mesh
     def getPropIDforElID(self,elID):
-        propID=0
-        elementId_color_dict = {
-            1: 0,
-            2: 1,
-            3: 2,
-            4: 2,
-            5: 5,
-            6: 0,
-            7: 1,
-            8: 2,
-            9: 5,
-            10: 20,
-        }
         n=elID
         while n > 10:
             n=n-10
-        propID=elementId_color_dict[n]
+        propID = self.elementId_color_dict[n]
         return propID
 
     def getElResult(self,elID,numEl):
@@ -227,30 +227,34 @@ class OOFEM (Geometry):
         floatColors = []
         for color in colors:
             floatColors.append([x / 255 for x in color])
-        print(floatColors)
-
         mesh= self.mesh
         mesh.request_face_colors()
-
+        propColorDict={}
         for el in self.element2Face:
             idProp=self.getPropIDforElID(el)
+            nuc=len(propColorDict)
+            indexColor = 0
+            if idProp in propColorDict:
+                indexColor=propColorDict[idProp]
+            else:
+                propColorDict[idProp]=nuc
+                indexColor=nuc
             for fh in self.element2Face[el]:
-                #mesh.set_color(fh, floatColors[elementId_color_dict.get(el % 20)])
-                #mesh.set_color(fh, self.getContinuousColor(random.uniform(0, 1), 0, 1))
-                if el % 20 == 0:
-                    mesh.set_color(fh, floatColors[19])
-                else:
-                    mesh.set_color(fh, floatColors[(el % 20) - 1])
+                mesh.set_color(fh, floatColors[indexColor])
             pass
         pass
+
     def showFaceColorC(self):
         mesh= self.mesh
         mesh.request_face_colors()
-
+        index = 0
         for el in self.element2Face:
-            val = self.getElResult(el, len(self.element2Face))
+            index = index + 1
+            val = index / len(self.element2Face)
+            print(val)
+            print(self.element2Face)
             for fh in self.element2Face[el]:
-                color=self.getContinuousColor(val, 0, 1)
+                color = self.getContinuousColor(val, 0, 1)
                 mesh.set_color(fh, color)
             pass
         pass
@@ -287,7 +291,6 @@ class OOFEM (Geometry):
         else:
             color[1] = 1 + 4 * (vmin + 0.75 * dv - v) / dv
             color[2] = 0
-        print(color)
         return color
 
 
