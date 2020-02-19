@@ -9,6 +9,10 @@ import numpy as np
 class OOFEM (Geometry):
     def __init__(self,fileName, guid = None):
         super().__init__(guid)
+        self.drawLegend = False
+        self.legendValues = []
+        self.legendColors = []
+        self.legendTitle=""
         self.filename=fileName
         self.all_face_handles = {} # key=faceHandle, value = element ID
         self.element2Face = {}     # key=element ID, value = [faceHandle1,...faceHandlex]
@@ -24,6 +28,9 @@ class OOFEM (Geometry):
             9: 0,
             10: 0
         }
+        self.crosssectdict={}
+        self.materialdict = {}
+        self.elementcrosssectdict = {}
 
 
     def genMesh(self):
@@ -181,13 +188,14 @@ class OOFEM (Geometry):
             if len(sline) < 3:
                 continue
             #print(sline[0].lower())
-            if sline[0] == "node":
+            if sline[0].lower() == "node":
                 d = [float(sline[4]), float(sline[5]), float(sline[6])]
                 all_vertices[sline[1]] = d
             elif  sline[0].lower() in plateElementTypes:
                 id=int(sline[1])
                 elementFaceHandles=[]
                 self.element2Face[id]=elementFaceHandles
+                self.elementcrosssectdict[id]=int(sline[-1])
                 numNodes=int(sline[3])
                 if numNodes >= 3:
                     vh_list = [mesh.add_vertex(all_vertices.get(sline[4])), mesh.add_vertex(all_vertices.get(sline[5])),
@@ -206,8 +214,13 @@ class OOFEM (Geometry):
                 else:
                     print ("unhandled type of the element")
                     pass
+            elif sline[0].lower() == "simplecs":
+                self.crosssectdict[int(sline[1])]=sline
+            elif sline[0].lower() == "isole":
+                self.materialdict[int(sline[1])] = sline
+        f.close()
         #self.showFaceColorC()
-        self.showFaceColorP()
+        #self.showFaceColorP()
         #self.showVertexColor()
         return mesh
     def getPropIDforElID(self,elID):
@@ -222,7 +235,25 @@ class OOFEM (Geometry):
         retVal=random.uniform(0, 1)
         return  retVal
 
-    def showFaceColorP(self):
+    def showSolidColor(self):
+        self.legendValues.clear()
+        self.legendColors.clear()
+        self.drawLegend = False
+
+    def showCrossSectID(self):
+        self.legendTitle="Cross section ID"
+        self.showFaceColorP(self.elementcrosssectdict)
+
+    def showMaterialID(self):
+        self.legendTitle = "Material ID"
+        propDict={}
+        for el in self.elementcrosssectdict:
+            csID= self.elementcrosssectdict[el]
+            sline= self.crosssectdict[csID]
+            propDict[el]=int(sline[-1])
+        self.showFaceColorP(propDict)
+
+    def showFaceColorP(self,propDict):
         colors = [[139,0,0,255],[220,20,60,255],[255,0,0,255],[255,20,147,255],[255,105,180,255],[255,192,203,255],[255,182,193,255],[0,100,0,255],[46,139,87,255],[143,188,143,255],[50,205,50,255],[0,255,0,255],[152,251,152,255],[0,0,139,255],[0,0,255,255],[65,105,225,255],[30,144,255,255],[0,191,255,255],[135,206,235,255],[173,216,230,255]]
         floatColors = []
         for color in colors:
@@ -230,8 +261,11 @@ class OOFEM (Geometry):
         mesh= self.mesh
         mesh.request_face_colors()
         propColorDict={}
+        self.legendValues.clear()
+        self.legendColors.clear()
+        self.drawLegend = False
         for el in self.element2Face:
-            idProp=self.getPropIDforElID(el)
+            idProp=propDict[el]
             nuc=len(propColorDict)
             indexColor = 0
             if idProp in propColorDict:
@@ -239,22 +273,43 @@ class OOFEM (Geometry):
             else:
                 propColorDict[idProp]=nuc
                 indexColor=nuc
+                self.legendValues.append(str(idProp))
+                self.legendColors.append(floatColors[indexColor])
             for fh in self.element2Face[el]:
                 mesh.set_color(fh, floatColors[indexColor])
             pass
+        if  len(self.legendValues)> 0:
+            self.drawLegend=True
         pass
 
-    def showFaceColorC(self):
+    def prepContColorLegend(self,minVal, maxVal,nColor):
+        self.legendValues.clear()
+        self.legendColors.clear()
+        self.drawLegend = True
+        self.legendValues=np.linspace(minVal,maxVal,nColor)
+        for val in self.legendValues:
+            color = self.getContinuousColor(val, minVal, maxVal)
+            self.legendColors.append(color)
+
+
+    def showFaceColorC(self,dictElVals):
         mesh= self.mesh
         mesh.request_face_colors()
+        minVal=float('inf')
+        maxVal = float('-inf')
+        for el in dictElVals:
+            val=dictElVals[el]
+            if val > maxVal:
+                maxVal=val
+            if val < minVal:
+                minVal = val
         index = 0
+        self.prepContColorLegend(minVal,maxVal,10)
         for el in self.element2Face:
             index = index + 1
-            val = index / len(self.element2Face)
-            print(val)
-            print(self.element2Face)
+            val = dictElVals[el]
             for fh in self.element2Face[el]:
-                color = self.getContinuousColor(val, 0, 1)
+                color = self.getContinuousColor(val, minVal, maxVal)
                 mesh.set_color(fh, color)
             pass
         pass

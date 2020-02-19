@@ -4,6 +4,8 @@ from PySide2.QtCore import Qt, QRect, Slot
 
 from signals import Signals, DragInfo
 from painterbasic.basicpainter import BasicPainter
+from painterbasic.basicinfopainter import BasicInfoPainter
+from painterbasic.basicqpainter import BasicQPainter
 
 from bounds import  BBox
 from selection import Selector
@@ -12,7 +14,10 @@ from painters import Painter
 
 
 class GlWin(QOpenGLWidget):
-    glPainters = [BasicPainter()]
+    glPainters = [BasicInfoPainter()]
+    #glPainters = [BasicPainter()]
+    #glPainters = [BasicPainter(), BasicInfoPainter()]
+    glPainters = [BasicPainter(), BasicQPainter()]
     mv = QMatrix4x4()
     proj = QMatrix4x4()
     vport = QRect()
@@ -22,6 +27,7 @@ class GlWin(QOpenGLWidget):
     phi = 0.0  # rotation about X
     theta = 0.0  # rotation about Y
     zoomFactor = 1.0 #vrport
+
 
     _rotate = 1
     _zoom   = 2
@@ -49,7 +55,7 @@ class GlWin(QOpenGLWidget):
                         -r, r)
 
         for p in self.glPainters:
-            p.setprogramvalues(self.proj, self.mv, self.mv.normalMatrix(), QVector3D(0, 0, 99999999))
+            p.setprogramvalues(self.proj, self.mv, self.mv.normalMatrix(), QVector3D(0, 99999999, 99999999))
 
         for p in self.glPainters:
             p.paintGL()
@@ -72,6 +78,10 @@ class GlWin(QOpenGLWidget):
 
         for p in self.glPainters:
             p.initializeGL()
+
+        for p in self.glPainters:
+            if isinstance(p,BasicQPainter):
+                p.paintDevice=self
 
     def resizeGL(self, w:int, h:int):
         self.vport.setWidth(w)
@@ -161,11 +171,14 @@ class GlWin(QOpenGLWidget):
 
 
     def calcMovementType(self, mb:Qt.MouseButtons, km:Qt.KeyboardModifiers):
-        if mb == Qt.NoButton or mb == Qt.RightButton:
+        #if mb == Qt.NoButton or mb == Qt.RightButton:
+        if mb == Qt.NoButton:
             return None
 
         if mb == Qt.MiddleButton:
             return self._pan
+        if mb == Qt.RightButton:
+            return self._zoom
 
         assert(mb == Qt.LeftButton)
 
