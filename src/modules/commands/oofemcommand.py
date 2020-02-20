@@ -31,6 +31,9 @@ class OOFEMCommand(Command):
         menuMatID = self.menuView.addAction("MatID")
         menuMatID.triggered.connect(self.onMatID)
 
+        menuThID = self.menuView.addAction("Thickness")
+        menuThID.triggered.connect(self.onThID)
+
         menuAnalyse = self.menuAnalysis.addAction("Analyse")
         menuAnalyse.triggered.connect(self.onAnalyse)
 
@@ -53,6 +56,12 @@ class OOFEMCommand(Command):
     def onCSID(self):
 
         self.oofem.showCrossSectID()
+        Signals.get().geometryAdded.emit(self.oofem)
+        pass
+
+    def onThID(self):
+
+        self.oofem.showThicknessID()
         Signals.get().geometryAdded.emit(self.oofem)
         pass
 

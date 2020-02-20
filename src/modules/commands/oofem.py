@@ -253,6 +253,15 @@ class OOFEM (Geometry):
             propDict[el]=int(sline[-1])
         self.showFaceColorP(propDict)
 
+    def showThicknessID(self):
+        self.legendTitle = "Thickness"
+        propDict={}
+        for el in self.elementcrosssectdict:
+            thID= self.elementcrosssectdict[el]
+            sline= self.crosssectdict[thID]
+            propDict[el]=float(sline[3])
+        self.showFaceColorP(propDict)
+
     def showFaceColorP(self,propDict):
         colors = [[139,0,0,255],[220,20,60,255],[255,0,0,255],[255,20,147,255],[255,105,180,255],[255,192,203,255],[255,182,193,255],[0,100,0,255],[46,139,87,255],[143,188,143,255],[50,205,50,255],[0,255,0,255],[152,251,152,255],[0,0,139,255],[0,0,255,255],[65,105,225,255],[30,144,255,255],[0,191,255,255],[135,206,235,255],[173,216,230,255]]
         floatColors = []

@@ -39,7 +39,7 @@ class BasicQPainter(Painter):
         if not self.drawLegend:
             return
         painter = QPainter(self.paintDevice)
-        font= QFont("Times", 10, QFont.Bold)
+        font= QFont("Times", 10, QFont.Normal)
         painter.setFont(font)
 
         #painter.setBrush(self.brush)
@@ -67,14 +67,14 @@ class BasicQPainter(Painter):
             pts.append(QPoint(lqXpos + lqW, lqYpos));
             pts.append(QPoint(lqXpos + lqW, lqYpos + lqH));
             pts.append(QPoint(lqXpos, lqYpos + lqH));
-            rect = QRect(lqXpos-lqW, lqYpos, lqW, lqH)
+            rect = QRect(lqXpos-2*lqW, lqYpos, 2*lqW, lqH)
             lqYpos += lqH + lqGap;
             poly = QPolygon(pts)
 
             painter.drawPolygon(poly)
             painter.drawText(rect,Qt.AlignCenter,legVal)
         rect = QRect(lqXpos -100, 0, 130, lqH)
-        painter.drawText(rect, Qt.AlignLeft, self.legendTitle)
+        painter.drawText(rect, Qt.AlignCenter, self.legendTitle)
 
     def resizeGL(self, w:int, h:int):
         super().resizeGL(w,h)
