@@ -3,7 +3,7 @@ import random
 from geometry import Geometry
 import openmesh as om
 import numpy as np
-
+import math
 
 
 class OOFEM (Geometry):
@@ -31,7 +31,10 @@ class OOFEM (Geometry):
         self.crosssectdict={}
         self.materialdict = {}
         self.elementcrosssectdict = {}
-
+        self.resStress = {}
+        self.resDisp = {}
+        self.outFileName=""
+        self.vertexNodeDict = {}
 
     def genMesh(self):
         self.mesh = self.oofemmesh()
@@ -184,6 +187,15 @@ class OOFEM (Geometry):
 
         for line in f:
             line = ' '.join(line.split())
+            if line.startswith('#'):
+                continue
+            if self.outFileName=="":
+                self.outFileName=line.strip()
+                abspath = '\\'.join(self.filename.split('\\')[0:-1])
+                if len(abspath) < 1:
+                    abspath = '/'.join(self.filename.split('/')[0:-1])
+                self.outFileName = abspath + '/' + self.outFileName
+                continue
             sline = line.split(" ")
             if len(sline) < 3:
                 continue
@@ -200,6 +212,12 @@ class OOFEM (Geometry):
                 if numNodes >= 3:
                     vh_list = [mesh.add_vertex(all_vertices.get(sline[4])), mesh.add_vertex(all_vertices.get(sline[5])),
                                mesh.add_vertex(all_vertices.get(sline[6]))]
+                    index = 4
+                    # print(vh_list)
+                    for vh in vh_list:
+                        # print(vh)
+                        self.vertexNodeDict[vh.idx()] = int(sline[index])
+                        index = index + 1
                     fh=mesh.add_face(vh_list)
                     self.all_face_handles[fh] = int(sline[1])
                     elementFaceHandles.append(fh)
@@ -207,6 +225,13 @@ class OOFEM (Geometry):
                     if numNodes == 4:
                         vh_list = [mesh.add_vertex(all_vertices.get(sline[6])), mesh.add_vertex(all_vertices.get(sline[7])),
                                    mesh.add_vertex(all_vertices.get(sline[4]))]
+                        index = 6
+                        for vh in vh_list:
+                            # print(vh)
+                            if index == 8:
+                                index = 4
+                            self.vertexNodeDict[vh.idx()] = int(sline[index])
+                            index = index + 1
                         fh = mesh.add_face(vh_list)
                         self.all_face_handles[fh] = int(sline[1])
                         elementFaceHandles.append(fh)
@@ -262,8 +287,25 @@ class OOFEM (Geometry):
             propDict[el]=float(sline[3])
         self.showFaceColorP(propDict)
 
+    def showElementStress(self,sType):
+        legTitles = ["Sigma X", "Sigma Y", "Tau XY"]
+        if sType < 3:
+            self.legendTitle = legTitles[sType]
+        else:
+            self.legendTitle = "Sigma VM"
+        elResDict={}
+        for elID in self.resStress:
+            stress=self.resStress[elID]
+            if sType < 3:
+                val = stress[sType]
+            else:
+                val = math.sqrt(math.pow(stress[0], 2) + math.pow(stress[1], 2) + 3*math.pow(stress[2], 2)-stress[0]*stress[1])
+            elResDict[elID]=val
+        self.showFaceColorC(elResDict)
+
     def showFaceColorP(self,propDict):
-        colors = [[139,0,0,255],[220,20,60,255],[255,0,0,255],[255,20,147,255],[255,105,180,255],[255,192,203,255],[255,182,193,255],[0,100,0,255],[46,139,87,255],[143,188,143,255],[50,205,50,255],[0,255,0,255],[152,251,152,255],[0,0,139,255],[0,0,255,255],[65,105,225,255],[30,144,255,255],[0,191,255,255],[135,206,235,255],[173,216,230,255]]
+        #colors = [[139,0,0,255],[220,20,60,255],[255,0,0,255],[255,20,147,255],[255,105,180,255],[255,192,203,255],[255,182,193,255],[0,100,0,255],[46,139,87,255],[143,188,143,255],[50,205,50,255],[0,255,0,255],[152,251,152,255],[0,0,139,255],[0,0,255,255],[65,105,225,255],[30,144,255,255],[0,191,255,255],[135,206,235,255],[173,216,230,255]]
+        colors = [[0, 0, 255,255],[128, 0, 128,255],[222, 184, 135,255],[255, 165, 0,255],[0, 255, 0,255],[ 0, 128, 0,255],[128, 0, 0,255],[255, 0, 0,255],[255, 192, 203,255],[222, 184, 135,255],[255, 165, 0,255],[255, 127, 80,255],[128, 128, 0,255],[255, 255, 0,255],[245, 245, 220,255],[0, 255, 0,255],[ 0, 128, 0,255],[245, 255, 250,255],[0, 128, 128,255],[0, 255, 255,255],[0, 0, 128,255],[230, 230, 250,255],[255, 0, 255,255],[205, 133, 63,255]]
         floatColors = []
         for color in colors:
             floatColors.append([x / 255 for x in color])
@@ -295,14 +337,17 @@ class OOFEM (Geometry):
         self.legendValues.clear()
         self.legendColors.clear()
         self.drawLegend = True
-        self.legendValues=np.linspace(minVal,maxVal,nColor)
-        for val in self.legendValues:
+        legendValues=np.linspace(minVal,maxVal,nColor)
+        for x in legendValues:
+            self.legendValues.append(f"{x:.4g}")
+        for val in legendValues:
             color = self.getContinuousColor(val, minVal, maxVal)
             self.legendColors.append(color)
 
 
     def showFaceColorC(self,dictElVals):
         mesh= self.mesh
+        mesh.release_vertex_colors()
         mesh.request_face_colors()
         minVal=float('inf')
         maxVal = float('-inf')
@@ -313,7 +358,7 @@ class OOFEM (Geometry):
             if val < minVal:
                 minVal = val
         index = 0
-        self.prepContColorLegend(minVal,maxVal,10)
+        self.prepContColorLegend(minVal,maxVal,12)
         for el in self.element2Face:
             index = index + 1
             val = dictElVals[el]
@@ -323,20 +368,57 @@ class OOFEM (Geometry):
             pass
         pass
 
-    def showVertexColor(self):
+    def showElementVertexColor(self):
         mesh = self.mesh
-        mesh.request_face_colors()
+        mesh.release_face_colors()
+        mesh.request_vertex_colors()
         for el in self.element2Face:
             for fh in self.element2Face[el]:
-                iv=0
+                iv=1
                 for vh in mesh.fv(fh):
-                    mesh.set_color(vh, [0, 0.5, 1, 1])
+                    val = iv / len(mesh.vertices())
+                    color = self.getContinuousColor(val, 0, 1)
+                    mesh.set_color(vh, color)
+                    print(vh.idx())
+                    print("VHid", vh.idx())
+                    print("VHval ",self.vertexNodeDict.get(vh.idx()))
                     iv=iv+1
-            pass
-        pass
+
+    def showNodeVertexColor(self,dType):
+        legTitles=["Dx","Dy","Dz","Dx","Dy","Dz"]
+        if dType < 6:
+            self.legendTitle = legTitles[dType]
+        else:
+            self.legendTitle = "Tot.Disp."
+
+        minVal = float('inf')
+        maxVal = float('-inf')
+        for idNode in self.resDisp:
+            disp=self.resDisp[idNode]
+            if dType < 6:
+                val = disp[dType]
+            else:
+                val = math.sqrt(math.pow(disp[0],2)+math.pow(disp[1],2)+math.pow(disp[2],2))
+            if val > maxVal:
+                maxVal = val
+            if val < minVal:
+                minVal = val
+        self.prepContColorLegend(minVal, maxVal, 12)
+        mesh = self.mesh
+        mesh.request_vertex_colors()
+        for vh in mesh.vertices():
+            idNod=self.vertexNodeDict.get(vh.idx())
+            disp=self.resDisp[idNod]
+            if dType < 6:
+                val = disp[dType]
+            else:
+                val = math.sqrt(math.pow(disp[0],2)+math.pow(disp[1],2)+math.pow(disp[2],2))
+            color = self.getContinuousColor(val, minVal, maxVal)
+            mesh.set_color(vh, color)
+
 
     def getContinuousColor(self, v, vmin, vmax):
-        color = [1, 1, 1, 1]
+        color = [1.0, 1.0, 1.0, 1.0]
         if v < vmin:
             v = vmin
         if v > vmax:
@@ -356,6 +438,85 @@ class OOFEM (Geometry):
             color[1] = 1 + 4 * (vmin + 0.75 * dv - v) / dv
             color[2] = 0
         return color
+
+    def getSplitLine(self,line):
+        line=line.strip()
+        line = ' '.join(line.split())
+        split = line.split(' ')
+        return split
+
+    def ReadOutput(self):
+        f = open(self.outFileName, newline='')
+        self.resStress.clear()
+        self.resDisp.clear()
+        readValues = [0.0] * 6;
+        isDMPassed=False
+        isNodeResults = False
+        isElementResults=False
+
+        for line in f:
+            line=line.lower()
+            if line.startswith('#'):
+                continue
+            if "dofmanager output" in line:
+                isDMPassed=True
+                continue
+            if isDMPassed and line.startswith('node'):
+                isNodeResults=True
+            elif isNodeResults and "element output:" in line:
+                isElementResults = True
+                isNodeResults=False
+                continue
+            if isNodeResults:
+                splitData = self.getSplitLine(line)
+                while splitData[0] =='node':
+                    idNode = int(splitData[1])
+                    dispres=[0.0]*6
+                    line=next(f).lower()
+                    splitData = self.getSplitLine(line)
+                    while splitData[0] =='dof':
+                        idDof=int(splitData[1])
+                        dispres[idDof-1]=float(splitData[3])
+                        line=next(f).lower()
+                        splitData = self.getSplitLine(line)
+                    self.resDisp[idNode]=dispres
+            elif isElementResults:
+                splitData = self.getSplitLine(line)
+                while splitData[0] == 'element':
+                    stresres=[0.0]*3
+                    nsl=0
+                    idEl = int(splitData[1])
+                    line = next(f).lower()
+                    splitData = self.getSplitLine(line)
+                    while len(splitData) > 0 and splitData[0] != 'element':
+                        if splitData[0] == 'stresses':
+                            stresres[0]=stresres[0]+float(splitData[1])
+                            stresres[1] = stresres[1] + float(splitData[2])
+                            stresres[2] = stresres[2] + float(splitData[4])
+                            nsl=nsl+1
+                            pass
+                        try:
+                            line = next(f).lower()
+                            splitData = self.getSplitLine(line)
+                        except StopIteration:
+                            splitData=[]
+                    stresres[0]=stresres[0]/nsl
+                    stresres[1] = stresres[1] / nsl
+                    stresres[2] = stresres[2] / nsl
+                    self.resStress[idEl]=stresres
+                    if len(splitData)==0:
+                        break
+
+        f.close()
+
+
+
+
+
+
+
+
+
 
 
 

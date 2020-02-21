@@ -25,6 +25,10 @@ class OOFEMCommand(Command):
         self.menuOOFEM.addMenu(self.menuView)
         self.menuOOFEM.addMenu(self.menuAnalysis)
 
+        self.menuResults = QMenu("&Results")
+        self.menuView.addMenu(self.menuResults)
+        self.menuResults.setEnabled(False)
+
         menuCSID = self.menuView.addAction("CSID")
         menuCSID.triggered.connect(self.onCSID)
 
@@ -37,6 +41,30 @@ class OOFEMCommand(Command):
         menuAnalyse = self.menuAnalysis.addAction("Analyse")
         menuAnalyse.triggered.connect(self.onAnalyse)
 
+        menuStressX = self.menuResults.addAction("Sigma X")
+        menuStressX.triggered.connect(self.onSx)
+
+        menuStressY = self.menuResults.addAction("Sigma Y")
+        menuStressY.triggered.connect(self.onSy)
+
+        menuStressXY = self.menuResults.addAction("Tau XY")
+        menuStressXY.triggered.connect(self.onTxy)
+
+        menuStressVM = self.menuResults.addAction("Sigma VM")
+        menuStressVM.triggered.connect(self.onSVM)
+
+        menuDisp = self.menuResults.addAction("Tot. Disp.")
+        menuDisp.triggered.connect(self.onDisp)
+
+        menuDx = self.menuResults.addAction("Dx")
+        menuDx.triggered.connect(self.onDx)
+
+        menuDy = self.menuResults.addAction("Dy")
+        menuDy.triggered.connect(self.onDy)
+
+        menuDz = self.menuResults.addAction("Dz")
+        menuDz.triggered.connect(self.onDz)
+
         #tools.addMenu(menu)
         mb.addMenu(self.menuOOFEM)
         self.menuOOFEM.setEnabled(False)
@@ -47,6 +75,40 @@ class OOFEMCommand(Command):
         if isinstance(oofem,OOFEM):
             self.oofem=oofem
             self.menuOOFEM.setEnabled(True)
+
+    def onSx(self):
+        self.oofem.showElementStress(0)
+        Signals.get().geometryAdded.emit(self.oofem)
+
+    def onSy(self):
+        self.oofem.showElementStress(1)
+        Signals.get().geometryAdded.emit(self.oofem)
+
+    def onTxy(self):
+        self.oofem.showElementStress(2)
+        Signals.get().geometryAdded.emit(self.oofem)
+
+
+    def onSVM(self):
+        self.oofem.showElementStress(10)
+        Signals.get().geometryAdded.emit(self.oofem)
+
+
+    def onDx(self):
+        self.oofem.showNodeVertexColor(0)
+        Signals.get().geometryAdded.emit(self.oofem)
+
+    def onDy(self):
+        self.oofem.showNodeVertexColor(1)
+        Signals.get().geometryAdded.emit(self.oofem)
+
+    def onDz(self):
+        self.oofem.showNodeVertexColor(2)
+        Signals.get().geometryAdded.emit(self.oofem)
+
+    def onDisp(self):
+        self.oofem.showNodeVertexColor(10)
+        Signals.get().geometryAdded.emit(self.oofem)
 
     def onMatID(self):
 
@@ -66,7 +128,9 @@ class OOFEMCommand(Command):
         pass
 
     def onAnalyse(self):
-        QMessageBox.information(None, "Analysis", "Run OOFEM Analysis")
+        self.oofem.ReadOutput()
+        self.menuResults.setEnabled(True)
+
 
 class OOFEMImporter(IOHandler):
     def __init__(self):

@@ -11,6 +11,7 @@ import openmesh as om
 import numpy as np
 from selinfo import SelectionInfo
 from PySide2.QtGui import QBrush, QPainter,QPen ,QPolygon,QColor
+import PySide2.QtCore
 
 
 class BasicQPainter(Painter):
@@ -58,6 +59,7 @@ class BasicQPainter(Painter):
             n = [0, 0, 1]
             c = self.legendColors[iCol]
             color.setRgbF(c[0],c[1],c[2],c[3])
+            color =QColor(int(c[0]*255),int(c[1]*255),int(c[2]*255),int(c[3]*255))
             self.pen = QPen(QColor(0, 0, 0, 255), 1)
             self.brush=QBrush(color,Qt.BrushStyle(Qt.SolidPattern))
             painter.setPen(self.pen)
@@ -72,7 +74,7 @@ class BasicQPainter(Painter):
             poly = QPolygon(pts)
 
             painter.drawPolygon(poly)
-            painter.drawText(rect,Qt.AlignCenter,legVal)
+            painter.drawText(rect,Qt.AlignCenter,str(legVal))
         rect = QRect(lqXpos -100, 0, 130, lqH)
         painter.drawText(rect, Qt.AlignCenter, self.legendTitle)
 
