@@ -178,7 +178,7 @@ class OOFEM (Geometry):
 
     def oofemmesh(self):
 
-        mesh = om.TriMesh()
+        mesh = om.PolyMesh()
         self.mesh=mesh
         f = open(self.filename, newline='')
         all_vertices = {}
