@@ -2,6 +2,7 @@ from iohandlers import IOHandler
 from signals import Signals
 from geometry import Geometry
 import openmesh as om
+import os
 
 class OpenMeshImporter(IOHandler):
     def __init__(self):
@@ -10,8 +11,13 @@ class OpenMeshImporter(IOHandler):
 
     def importGeometry(self, fileName):
         g = Geometry()
+        fnam, fext = os.path.splitext(fileName)
         try:
-            m = om.read_trimesh(fileName)
+            if fext == ".ply":
+                m = om.read_trimesh(fileName,vertex_normal=True)
+            else:
+                m = om.read_trimesh(fileName)
+            pass
         except:
             print("File not supported for read with openmesh")
             return

@@ -216,7 +216,7 @@ class BasicPainter(Painter):
                 void main() {
                    highp vec3 L = normalize(lightPos - vert);
                    highp float NL = max(dot(normalize(vertNormal), L), 0.0);
-                   highp vec3 col = clamp(colorV.rgb * 0.8 + colorV.rgb * 0.2 * NL, 0.0, 1.0);
+                   highp vec3 col = clamp(colorV.rgb * 0.2 + colorV.rgb * 0.8 * NL, 0.0, 1.0);
                    gl_FragColor = vec4(col, colorV.a);
                 }"""
 
@@ -283,7 +283,11 @@ class BasicPainter(Painter):
         return
     def addMeshdata4oglmdl(self,key, geometry):
         mesh = geometry.mesh
-        if not mesh.has_face_normals(): # normals are necessary for correct lighting effect
+        if mesh.has_face_normals(): # normals are necessary for correct lighting effect
+            pass
+        elif mesh.has_vertex_normals(): # normals are necessary for correct lighting effect
+            pass
+        else:
             mesh.request_face_normals()
             mesh.update_face_normals();
         nf = mesh.n_faces()
@@ -291,7 +295,8 @@ class BasicPainter(Painter):
         if not mesh.has_face_colors() and not mesh.has_vertex_colors():
             c = [0.4, 1.0, 1.0, 1.0] #default color
         for fh in mesh.faces():
-            n=mesh.normal(fh)
+            if mesh.has_face_normals():
+                n=mesh.normal(fh)
             if mesh.has_face_colors():
                 c= mesh.color(fh)
             for vh in mesh.fv(fh): #vertex handle
@@ -299,6 +304,8 @@ class BasicPainter(Painter):
                 p=mesh.point(vh)
                 if mesh.has_vertex_colors():
                     c = mesh.color(vh)
+                if mesh.has_vertex_normals():
+                    n=mesh.normal(vh)
                 iv=0
                 self.appendlistdata_f3xyzf3nf4rgba(key,
                                                    p[0], p[1], p[2],
