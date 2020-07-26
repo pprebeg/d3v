@@ -22,6 +22,8 @@ class BasicPainter(Painter):
         super().__init__()
         self._dentsvertsdata = {}  # dictionary that holds vertex data for all primitive and  submodel combinations
         self._geo2Add = []
+        self._geo2Rebuild = []
+        self._geo2Remove = []
         self._doSelection=False
         self._si=SelectionInfo()
         self.program = 0
@@ -37,6 +39,8 @@ class BasicPainter(Painter):
         self.addGeoCount=0
         Signals.get().selectionChanged.connect(self.onSelected)
         self.paintDevice=0
+        self.selType=0 # 0 - geometry
+        #self.selType = 1  # 1 - facet
 
     def initializeGL(self):
         paintDevice = QApplication.instance().mainFrame.glWin
@@ -77,7 +81,7 @@ class BasicPainter(Painter):
         self.glf.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.glf.glEnable(GL.GL_DEPTH_TEST)
         self.glf.glEnable(GL.GL_CULL_FACE)
-        #self.glf.glDisable(GL.GL_CULL_FACE)
+        self.glf.glDisable(GL.GL_CULL_FACE)
         self.program.bind()
         for key, value in self._dentsvertsdata.items():
             value.drawvao(self.glf)
@@ -100,6 +104,16 @@ class BasicPainter(Painter):
         for key, value in self._dentsvertsdata.items():
             value.free()
         self._dentsvertsdata.clear()
+
+    def removeDictItem(self,key):
+        """!
+        Reset the item
+
+        Cleans the dictionary
+        """
+        if key in self._dentsvertsdata:
+            self._dentsvertsdata[key].free()
+            self._dentsvertsdata.pop(key,None)
 
     def initnewdictitem(self, key, enttype):
         """!
@@ -221,6 +235,16 @@ class BasicPainter(Painter):
         self._geo2Add.append(geometry)
         self.requestGLUpdate()
 
+    def removeGeometry(self, geometry:Geometry):
+        self._geo2Remove.append(geometry)
+        self.requestGLUpdate()
+        pass
+
+    def rebuildGeometry(self, geometry:Geometry):
+        self._geo2Rebuild.append(geometry)
+        self.requestGLUpdate()
+        pass
+
     def delayedAddGeometry(self, geometry:Geometry):
         self.addGeoCount= self.addGeoCount+1
         key= geometry.guid
@@ -232,26 +256,47 @@ class BasicPainter(Painter):
         self.addMeshdata4oglmdl(key,geometry)
         self.bindData(key)
 
+    def delayedRebuildGeometry(self, geometry:Geometry):
+        key= geometry.guid
+        self.removeDictItem(key)
+        self.initnewdictitem(key, GLEntityType.TRIA)
+        nf = geometry.mesh.n_faces()
+        self.appenddictitemsize(key, nf)
+        self.allocatememory(key)
+        self.addMeshdata4oglmdl(key,geometry)
+        self.bindData(key)
+
+    def delayedRemoveGeometry(self, geometry:Geometry):
+        key= geometry.guid
+        self.removeDictItem(key)
+
     def addSelection(self):
-        key= 0
-        if key in self._dentsvertsdata:
-            self._dentsvertsdata[key].free()
-            self._dentsvertsdata.pop(key)
-            #self._dentsvertsdata.clear()
+        if self.selType ==0:
             pass
-        if self._si.haveSelection():
-            self.initnewdictitem(key, GLEntityType.TRIA)
-            nf = self._si.nFaces()*2
-            self.appenddictitemsize(key, nf)
-            self.allocatememory(key)
-            self.addSelData4oglmdl(key, self._si, self._si.geometry)
-            self.bindData(key)
+        else:
+            key= 0
+            self.removeDictItem(key)
+            if self._si.haveSelection():
+                self.initnewdictitem(key, GLEntityType.TRIA)
+                nf = self._si.nFaces()*2
+                self.appenddictitemsize(key, nf)
+                self.allocatememory(key)
+                self.addSelData4oglmdl(key, self._si, self._si.geometry)
+                self.bindData(key)
 
     def updateGeometry(self):
+        if len(self._geo2Remove) > 0:
+            for geometry in self._geo2Remove:
+                self.delayedRemoveGeometry(geometry)
+            self._geo2Remove.clear()
         if len(self._geo2Add) > 0:
             for geometry in self._geo2Add:
                 self.delayedAddGeometry(geometry)
             self._geo2Add.clear()
+        if len(self._geo2Rebuild) > 0:
+            for geometry in self._geo2Rebuild:
+                self.delayedRebuildGeometry(geometry)
+            self._geo2Rebuild.clear()
         if self._doSelection:
             self.addSelection()
             self._doSelection=False
@@ -276,6 +321,11 @@ class BasicPainter(Painter):
                                                    c[0], c[1], c[2], c[3])
         return
     def addMeshdata4oglmdl(self,key, geometry):
+        useMeshColor=True
+        if self.selType == 0:
+            if self._si.geometry.guid == geometry.guid:
+                c = [1.0, 0.0, 1.0, 1.0]
+                useMeshColor = False
         mesh = geometry.mesh
         if not mesh.has_face_normals(): # normals are necessary for correct lighting effect
             mesh.request_face_normals()
@@ -283,15 +333,16 @@ class BasicPainter(Painter):
         nf = mesh.n_faces()
         verts = mesh.vertices()
         if not mesh.has_face_colors() and not mesh.has_vertex_colors():
-            c = [0.4, 1.0, 1.0, 1.0] #default color
+            if useMeshColor:
+                c = [0.4, 1.0, 1.0, 1.0] #default color
         for fh in mesh.faces():
             n=mesh.normal(fh)
-            if mesh.has_face_colors():
+            if useMeshColor and mesh.has_face_colors():
                 c= mesh.color(fh)
             for vh in mesh.fv(fh): #vertex handle
                 vit=mesh.vv(vh) # iterator
                 p=mesh.point(vh)
-                if mesh.has_vertex_colors():
+                if useMeshColor and mesh.has_vertex_colors():
                     c = mesh.color(vh)
                 iv=0
                 self.appendlistdata_f3xyzf3nf4rgba(key,
@@ -343,7 +394,25 @@ class BasicPainter(Painter):
         return
     @Slot()
     def onSelected(self, si:SelectionInfo):
-        self._doSelection=True
-        self._si=si
-        self.requestGLUpdate()
+        if self.selType==0: #whole geometry selection
+            if self._si.haveSelection() and si.haveSelection():
+                if self._si.geometry._guid != si.geometry._guid:
+                    self._geo2Remove.append(si.geometry)
+                    self._geo2Remove.append(self._si.geometry)
+                    self._geo2Add.append(self._si.geometry)
+                    self._geo2Add.append(si.geometry)
+                    self.requestGLUpdate()
+            elif si.haveSelection():
+                self._geo2Remove.append(si.geometry)
+                self._geo2Add.append(si.geometry)
+                self.requestGLUpdate()
+            elif self._si.haveSelection():
+                self._geo2Remove.append(self._si.geometry)
+                self._geo2Add.append(self._si.geometry)
+                self.requestGLUpdate()
+            self._si = si
+        else:
+            self._doSelection=True
+            self._si=si
+            self.requestGLUpdate()
         pass

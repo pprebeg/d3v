@@ -73,6 +73,8 @@ class GlWin(QOpenGLWidget):
         Signals.get().dragging.connect(self.onDrag)
         Signals.get().draggingEnd.connect(self.onDragEnd)
         Signals.get().geometryAdded.connect(self.onGeometryAdded)
+        Signals.get().geometryRemoved.connect(self.onGeometryRemoved)
+        Signals.get().geometryRebuild.connect(self.onGeometryRebuild)
 
         for p in self.glPainters:
             p.initializeGL(self)
@@ -193,6 +195,20 @@ class GlWin(QOpenGLWidget):
         self._bb =  self._bb + geometry.bbox
         for p in self.glPainters:
             p.addGeometry(geometry)
+        self.update()
+
+    @Slot()
+    def onGeometryRebuild(self, geometry):
+        self._bb = self._bb + geometry.bbox
+        for p in self.glPainters:
+            p.rebuildGeometry(geometry)
+        self.update()
+
+    @Slot()
+    def onGeometryRemoved(self, geometry):
+        self._bb = self._bb + geometry.bbox
+        for p in self.glPainters:
+            p.removeGeometry(geometry)
         self.update()
 
     @Slot()

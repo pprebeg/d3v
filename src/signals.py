@@ -63,6 +63,8 @@ class Signals(QObject):
     geometryImported = Signal(Geometry)
     importGeometry = Signal(str)
     selectionChanged = Signal(SelectionInfo)
+    geometryRebuild = Signal(Geometry)
+    geometryRemoved = Signal(Geometry)
 
     def __init__(self):
         """ Virtually private constructor. """
