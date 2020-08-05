@@ -16,6 +16,7 @@ from selinfo import SelectionInfo
 from PySide2.QtGui import QBrush, QPainter,QPen ,QPolygon,QColor,QFont
 from PySide2.QtCore import QRect,Qt
 from PySide2.QtWidgets import QApplication
+import time
 
 class BasicPainter(Painter):
     def __init__(self):
@@ -81,7 +82,7 @@ class BasicPainter(Painter):
         self.glf.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.glf.glEnable(GL.GL_DEPTH_TEST)
         self.glf.glEnable(GL.GL_CULL_FACE)
-        self.glf.glDisable(GL.GL_CULL_FACE)
+        #self.glf.glDisable(GL.GL_CULL_FACE)
         self.program.bind()
         for key, value in self._dentsvertsdata.items():
             value.drawvao(self.glf)
@@ -246,6 +247,7 @@ class BasicPainter(Painter):
         pass
 
     def delayedAddGeometry(self, geometry:Geometry):
+        #tsAG = time.perf_counter()
         self.addGeoCount= self.addGeoCount+1
         key= geometry.guid
         #self.resetmodel()
@@ -253,8 +255,15 @@ class BasicPainter(Painter):
         nf = geometry.mesh.n_faces()
         self.appenddictitemsize(key, nf)
         self.allocatememory(key)
+        #tsAG1 = time.perf_counter()
         self.addMeshdata4oglmdl(key,geometry)
+        #dtAG1 = time.perf_counter() - tsAG1
         self.bindData(key)
+
+
+        #dtAG = time.perf_counter() - tsAG
+        #print("Add geometry time, s:", dtAG)
+        #print("addMeshdata4oglmdl time, s:", dtAG)
 
     def delayedRebuildGeometry(self, geometry:Geometry):
         key= geometry.guid
@@ -321,6 +330,7 @@ class BasicPainter(Painter):
                                                    c[0], c[1], c[2], c[3])
         return
     def addMeshdata4oglmdl(self,key, geometry):
+        #tsAMD = time.perf_counter()
         useMeshColor=True
         if self.selType == 0:
             if self._si.geometry.guid == geometry.guid:
@@ -337,6 +347,7 @@ class BasicPainter(Painter):
                 c = [0.4, 1.0, 1.0, 1.0] #default color
         for fh in mesh.faces():
             n=mesh.normal(fh)
+
             if useMeshColor and mesh.has_face_colors():
                 c= mesh.color(fh)
             for vh in mesh.fv(fh): #vertex handle
@@ -349,6 +360,8 @@ class BasicPainter(Painter):
                                                    p[0], p[1], p[2],
                                                    n[0], n[1], n[2],
                                                    c[0], c[1], c[2],c[3])
+        #dtAMD = time.perf_counter() - tsAMD
+        #print("Add mesh data total:", dtAMD)
         return
 
     def addMeshdata4oglmdl_bkp(self,key, geometry):

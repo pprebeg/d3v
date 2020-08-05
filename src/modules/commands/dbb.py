@@ -7,6 +7,14 @@ import numpy as np
 import copy
 import myfunctions as mf
 
+class DBBGeometry (Geometry):
+	def __init__(self):
+		super().__init__()
+		self.subdivboxes=[]
+		self.nsubdivbox=0
+		self.minsubdivbox = 0
+
+
 class DBBProblem ():
 	def __init__(self,fileName):
 		self.filename=fileName
