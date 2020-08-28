@@ -47,7 +47,6 @@ class DBBCommand(Command):
 
         Signals.get().geometryAdded.connect(self.registerDBB)
         Signals.get().selectionChanged.connect(self.registerSelection)
-        self.dbb = 0
 
     @Slot()
     def registerDBB(self, dbbproblem):
@@ -69,6 +68,8 @@ class DBBCommand(Command):
         self.menuInitTestProblem.setEnabled(False)
 
     def onMoveDBB(self):
+        if self.si == 0:
+            return
         if self.si.haveSelection():
             currDBB=self.si.getGeometry()
             if isinstance(currDBB,DBB):
@@ -80,7 +81,6 @@ class DBBCommand(Command):
 class DBBImporter(IOHandler):
     def __init__(self):
         super().__init__()
-        Signals.get().importGeometry.connect(self.importGeometry)
 
     def importGeometry(self, fileName):
         if len(fileName) < 1:
@@ -96,7 +96,7 @@ class DBBImporter(IOHandler):
             Signals.get().geometryImported.emit(dbb)
 
     def getImportFormats(self):
-        return []
+        return [".dbb"]
 
 class DialogDBBProps(QDialog):
     def __init__(self, parent):

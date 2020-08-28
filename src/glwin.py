@@ -56,7 +56,7 @@ class GlWin(QOpenGLWidget):
         self.painters2init.clear()
 
         for p in self.glPainters:
-            p.setprogramvalues(self.proj, self.mv, self.mv.normalMatrix(), QVector3D(0, 0, 70))
+            p.setprogramvalues(self.proj, self.mv, self.mv.normalMatrix(), QVector3D(0, 0, 700))
 
         for p in self.glPainters:
             p.paintGL()
