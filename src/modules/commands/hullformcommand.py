@@ -82,7 +82,6 @@ class HullFormImporter(IOHandler):
         if file_extension != ".huf":
             return
         hf = HullForm(fileName)
-        hf.generateMesh()
         Signals.get().geometryImported.emit(hf)
 
     def getImportFormats(self):

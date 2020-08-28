@@ -12,7 +12,7 @@ import math as Math
 
 class HullFormMeshQuality:
     def __init__(self):
-        self._numWL = 30
+        self._numWL = 50
         self._numPnWLhalf = 30
         self._distPolyOrder=3
 
@@ -51,7 +51,7 @@ class HullFormMeshQuality:
                         break
             wlPosi = self._getDistribution(hmax, hmin, numWL+2, 1)
             for wl in wlPosi:
-                if len[wlPos==0]:
+                if len(wlPos)==0:
                     wlPos.append(wl)
                 elif wl < wlPos[-1]:
                     wlPos.append(wl)
@@ -70,16 +70,17 @@ class HullForm(Geometry):
         self.shipdata = results[0]
         self.pdecks = results[1]
         self.pbulkheads = results[2]
-        self.wlinesPos = []  # positive y waterlines
+        self.h = []  # positive y waterlines
         self.wlinesNeg = []  # negative y waerlines
         self.wlKeel = []  # keel waterline (one waterline)
+        self.generateMesh()
 
     def generateMesh(self):
 
         hmax=self.pdecks[0]
         #hmax=9.4
-        wlPos=self.hfmq.genWLPositions(hmax, 0)
-        #wlPos = self.hfmq.genWLPositionsUsingObligatory(self.pdecks)
+        #wlPos=self.hfmq.genWLPositions(hmax, 0)
+        wlPos = self.hfmq.genWLPositionsUsingObligatory(self.pdecks)
         #results = self.hullGen(self.shipdata, wlPos, self.hfmq.numPointsWLhalf)
         lines = self.hullGen(self.shipdata, wlPos, self.hfmq.numPointsWLhalf)
         self.wlinesPos = lines[0]  # positive y waterlines
@@ -89,8 +90,259 @@ class HullForm(Geometry):
         pass
 
     def getResults(self):
-        self.getVolume(9.4)
+        h=9.4
+        self.getVolume(h)
+        self.getAwl(h)
+        self.getXwl(h)
+        self.getKBzKBx(h)
+        self.getIbIl(h)
+        self.getHP(h)
+        self.getLwlBwlAx(h)
+        self.getKoef(h)
         pass
+
+    def getLwlBwlAx(self, hvl):
+        mesh = self.mesh
+        h = hvl
+        Bwl = 0
+        for fh in mesh.faces():  # facet handle
+            p = []
+            for vh in mesh.fv(fh):  # vertex handle
+                p.append(mesh.point(vh))
+            # A
+            Ax = p[0][0]
+            Ay = p[0][1]
+            Az = p[0][2]
+            # B
+            Bx = p[1][0]
+            By = p[1][1]
+            Bz = p[1][2]
+            # C
+            Cx = p[2][0]
+            Cy = p[2][1]
+            Cz = p[2][2]
+
+            if Az == h and Ay == 0 and Ax > 0:
+                Lwl = Ax
+            if Bz == h and By == 0 and Bx > 0:
+                Lwl = Bx
+            if Cz == h and Cy == 0 and Cx > 0:
+                Lwl = Cx
+            if Ay > Bwl:
+                Bwl = Ay
+            if By > Bwl:
+                Bwl = By
+            if Cy > Bwl:
+                Bwl = Cy
+        for fh in mesh.faces():  # facet handle
+            p = []
+            for vh in mesh.fv(fh):  # vertex handle
+                p.append(mesh.point(vh))
+            # A
+            Ax = p[0][0]
+            Ay = p[0][1]
+            Az = p[0][2]
+            # B
+            Bx = p[1][0]
+            By = p[1][1]
+            Bz = p[1][2]
+            # C
+            Cx = p[2][0]
+            Cy = p[2][1]
+            Cz = p[2][2]
+            if Az == h and Ay == Bwl:
+                b = Ax
+            if Bz == h and By == Bwl:
+                b = Bx
+            if Cz == h and Cy == Bwl:
+                b = Cx
+        Bwl = 2 * Bwl
+
+
+        return Lwl, Bwl
+
+
+    def getKoef(self, hvl):
+        mesh = self.mesh
+        h = hvl
+        Lwl, Bwl = self.getLwlBwl(h)
+        V = self.getVolume(h)
+        Cwl = self.getAwl(h) / (Lwl * Bwl)
+        CB = V / (Lwl * Bwl * h)
+        # CP = self.getVolume(h) / AX * Lwl
+        # CX = AX / Bwl * h
+
+        print(Cwl, CB)
+        return Cwl, CB
+
+    def getHP(self, hvl):
+        mesh = self.mesh
+        h = hvl
+        Ib,Il = self.getIbIl(h)
+        KBz,KBx = self.getKBzKBx(h)
+        MoB = Ib/self.getVolume(h)
+        KMo = MoB + KBz
+        MlB = Il/self.getVolume(h)
+        KMl = MlB + KBz
+        JZ = 0.01 * self.getAwl(h) * 1.025
+        # M1 = Il /
+        print(MoB, KMo, MlB, KMl, JZ)
+        return MoB, KMo, MlB, KMl, JZ
+
+    def getIbIl(self, hvl):
+        mesh = self.mesh
+        h = hvl
+        Ib = 0
+        Il = 0
+        for fh in mesh.faces():  # facet handle
+            p = []
+            r = []
+            for vh in mesh.fv(fh):  # vertex handle
+                p.append(mesh.point(vh))
+            # A
+            Ax = p[0][0]
+            Ay = p[0][1]
+            Az = p[0][2]
+            # B
+            Bx = p[1][0]
+            By = p[1][1]
+            Bz = p[1][2]
+            # C
+            Cx = p[2][0]
+            Cy = p[2][1]
+            Cz = p[2][2]
+            if Az <= h:
+                if Bz <= h:
+                    if Cz <= h:
+                        r.append(self.TezisteTrokuta(Ax, Ay, h, Bx, By, h, Cx, Cy, h))
+                        Ib = Ib + r[0][1]**2 * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By)))
+                        Il = Il + r[0][0] ** 2 * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By)))
+
+        print(Ib, Il)
+        return Ib, Il
+
+    def getKBzKBx(self, hvl):
+        mesh = self.mesh
+        h = hvl
+        hsr = 0
+        KBz = 0
+        KBx = 0
+        for fh in mesh.faces():  # facet handle
+            p = []
+            r = []
+            for vh in mesh.fv(fh):  # vertex handle
+                p.append(mesh.point(vh))
+            # A
+            Ax = p[0][0]
+            Ay = p[0][1]
+            Az = p[0][2]
+            # B
+            Bx = p[1][0]
+            By = p[1][1]
+            Bz = p[1][2]
+            # C
+            Cx = p[2][0]
+            Cy = p[2][1]
+            Cz = p[2][2]
+            if Az <= h:
+                if Bz <= h:
+                    if Cz <= h:
+                        hsr = (Az + Bz + Cz)/3
+                        r.append(self.TezisteTrokuta(Ax, Ay, (h - hsr), Bx, By, (h - hsr), Cx, Cy, (h - hsr)))
+                        KBz = KBz + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By)))*(h - hsr)*(hsr + (h - hsr)/2)
+                        KBx = KBx + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By)))*(h - hsr)*(r[0][0])
+
+        KBz = KBz / self.getVolume(h)
+        KBx = KBx / self.getVolume(h)
+
+        print(KBz)
+        print(KBx)
+        return KBz, KBx
+
+
+    def TezisteTrokuta(self, Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz):
+
+        Xcm = (Ax + Bx + Cx) / 3
+        Ycm = (Ay + By + Cy) / 3
+        Zcm = (Az + Bz + Cz) / 3
+
+        return Xcm, Ycm, Zcm
+
+    def getXwl(self, hvl):
+        mesh = self.mesh
+        h = hvl
+        Xwl = 0
+        for fh in mesh.faces():  # facet handle
+            p = []
+            r = []
+            for vh in mesh.fv(fh):  # vertex handle
+                p.append(mesh.point(vh))
+            # A
+            Ax = p[0][0]
+            Ay = p[0][1]
+            Az = p[0][2]
+            # B
+            Bx = p[1][0]
+            By = p[1][1]
+            Bz = p[1][2]
+            # C
+            Cx = p[2][0]
+            Cy = p[2][1]
+            Cz = p[2][2]
+            if Az <= h:
+                if Bz <= h:
+                    if Cz <= h:
+                        r.append(self.TezisteTrokuta(Ax, Ay, h, Bx, By, h, Cx, Cy, h))
+                        Xwl = Xwl + (r[0][0] *abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))))
+        Xwl = Xwl/self.getAwl(h)
+        print(Xwl)
+        return Xwl
+
+    def getAwl(self, hvl):
+        mesh = self.mesh
+        Awl = 0
+        h = hvl
+        lpowl=[]
+        p = []
+        for fh in mesh.faces():  # facet handle
+            p.clear()
+            lpowl.clear()
+            i=0
+            for vh in mesh.fv(fh):  # vertex handle
+                p.append(mesh.point(vh))
+                if p[i][2] > hvl:
+                    lpowl.append(i)
+                i=i+1
+
+            if len(lpowl) < 1:
+                # A
+                Ax = p[0][0]
+                Ay = p[0][1]
+                # B
+                Bx = p[1][0]
+                By = p[1][1]
+                # C
+                Cx = p[2][0]
+                Cy = p[2][1]
+                area = self.calcArea2DTria(Ax,Ay,Bx,By,Cx,Cy)
+            elif len(lpowl) < 2:
+                # 2 trokuta
+                pass
+            elif len(lpowl) < 3:
+                # 1 trokut
+                pass
+            else:
+                area = 0
+
+
+            Awl = Awl + area
+
+        print(Awl)
+        return Awl
+
+    def calcArea2DTria(self,Ax,Ay,Bx,By,Cx,Cy):
+        area = 1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))
+        return abs(area)
 
     def getVolume(self, hvl):
         mesh=self.mesh
@@ -118,8 +370,12 @@ class HullForm(Geometry):
             hA = h - Az
             hB = h - Bz
             hC = h - Cz
-            area = 1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))
-            vol = vol + abs(area) * (hA + hB + hC) / 3.0
+            if Az <= h:
+                if Bz <= h:
+                    if Cz <= h:
+                        area = 1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))
+                        vol = vol + abs(area) * (hA + hB + hC) / 3.0
+
         print(vol)
         return vol
 
@@ -227,6 +483,7 @@ class HullForm(Geometry):
 
         self._genFaces(mesh,whsPos,True)
         self._genFaces(mesh, whsNeg,False)
+
         return mesh
 
 
