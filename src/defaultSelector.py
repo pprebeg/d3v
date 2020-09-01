@@ -55,7 +55,7 @@ class npvector3:
         return self._vec3
 
     @Y.setter
-    def X(self, newY):
+    def Y(self, newY):
         self._vec3[1] = newY
 
     @property

@@ -42,6 +42,21 @@ class BasicPainter(Painter):
         self.paintDevice=0
         self.selType=0 # 0 - geometry
         #self.selType = 1  # 1 - facet
+        self._showBack=False
+        self._multFactor =1
+        self.showBack = True
+
+    @property
+    def showBack(self):
+        return self._showBack
+
+    @showBack.setter
+    def showBack(self, newShowBack):
+        self._showBack = newShowBack
+        self._multFactor = 1
+        if self._showBack:
+            self._multFactor = 2
+
 
     def initializeGL(self):
         paintDevice = QApplication.instance().mainFrame.glWin
@@ -82,7 +97,7 @@ class BasicPainter(Painter):
         self.glf.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.glf.glEnable(GL.GL_DEPTH_TEST)
         self.glf.glEnable(GL.GL_CULL_FACE)
-        self.glf.glDisable(GL.GL_CULL_FACE)
+        #self.glf.glDisable(GL.GL_CULL_FACE)
         self.program.bind()
         for key, value in self._dentsvertsdata.items():
             value.drawvao(self.glf)
@@ -147,7 +162,7 @@ class BasicPainter(Painter):
         :@param key:(str) key
         :@param numents:(\b int) number of entities to be added
         """
-        self._dentsvertsdata[key].appendsize(numents)
+        self._dentsvertsdata[key].appendsize(numents*self._multFactor)
 
     def allocatememory(self):
         """!
@@ -155,8 +170,11 @@ class BasicPainter(Painter):
 
         Allocation size is based on the information collected by client calls to appenddictitemsize()
         """
+
+
         for key, value in self._dentsvertsdata.items():
             value.allocatememory()
+
     def allocatememory(self,key):
         """!
         Allocate memory for all dictionary items that holds data for rendering
@@ -346,6 +364,9 @@ class BasicPainter(Painter):
             if useMeshColor:
                 c = [0.4, 1.0, 1.0, 1.0] #default color
         for fh in mesh.faces():
+            pp = []
+            cc=[]
+            nn = []
             n=mesh.normal(fh)
 
             if useMeshColor and mesh.has_face_colors():
@@ -356,10 +377,23 @@ class BasicPainter(Painter):
                 if useMeshColor and mesh.has_vertex_colors():
                     c = mesh.color(vh)
                 iv=0
+                if self._showBack:
+                    pp.append(p)
+                    nn.append(n)
+                    cc.append(c)
                 self.appendlistdata_f3xyzf3nf4rgba(key,
                                                    p[0], p[1], p[2],
                                                    n[0], n[1], n[2],
                                                    c[0], c[1], c[2],c[3])
+            if self._showBack:
+                nv=len(pp)
+                for iv in range(nv):
+                    ivi=nv-1-iv
+                    self.appendlistdata_f3xyzf3nf4rgba(key,
+                                                       pp[ivi][0], pp[ivi][1], pp[ivi][2],
+                                                       -nn[ivi][0], -nn[ivi][1], -nn[ivi][2],
+                                                       cc[ivi][0], cc[ivi][1], cc[ivi][2], cc[ivi][3])
+
         #dtAMD = time.perf_counter() - tsAMD
         #print("Add mesh data total:", dtAMD)
         return
