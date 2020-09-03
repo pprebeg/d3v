@@ -1,5 +1,6 @@
 from geofem import GeoFEM,Node,StiffQuadElement, Material, BeamProperty,StiffLayoutProperty,PlateProperty
 from geofem import StiffTriaElement, BeamElement, RodElement,Element
+import  numpy as np
 import uuid
 import xml.etree.ElementTree as ET
 def getFloat(item, key):
@@ -10,6 +11,10 @@ def getGuid(item,key):
     return  uuid.UUID(item.attrib[key])
 def getStr(item, key):
     return  (item.attrib[key])
+
+def getNPVector(item, key):
+    npVec=  (np.array(item.attrib[key].split(','))).astype(np.float)
+    return  npVec
 
 
 class MaestroXML:
@@ -131,6 +136,7 @@ class MaestroXML:
             elif  item.tag == 'Bar':
                 elem = BeamElement()
                 sNodeIds = item.attrib['sNodeIds'].split(' ')
+                elem.wo= getNPVector(item,'sWebVec')
                 self.addElement(fem, elem, getInt(item, 'iId'), getInt(item, "iIdProp"),getStr(item, 'sNodeIds'))
             elif  item.tag == 'Rod':
                 elem = RodElement()

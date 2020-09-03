@@ -129,8 +129,80 @@ class BeamElement(Element):
     def __init__(self):
         super().__init__()
         self.wo = np.array([0, 0, 0]) #web orientation
-        pass
+
     def updateMesh(self,mesh:om.TriMesh,mc:MeshControl):
+        print("čvor 1")
+        print(self.nodes[0].p)
+        print(self.nodes[0].p[0])
+        print(self.nodes[0].p[1])
+        print(self.nodes[0].p[2])
+        print("čvor 1a")
+        print(self.nodes[0].p[0])
+        print(self.nodes[0].p[1])
+        print(self.nodes[0].p[2]-1)
+        print("čvor 2")
+        print(self.nodes[1].p)
+
+        vhandle = []
+
+        hw=self.property.hw
+        tw=self.property.tw
+        bf=self.property.bf
+        tf = self.property.tf
+
+        vhandle.append(mesh.add_vertex(self.nodes[0].p))
+        vhandle.append(mesh.add_vertex(self.nodes[1].p))
+
+
+        data = self.nodes[0].p + self.wo*hw  #2 točka 3
+        vhandle.append(mesh.add_vertex(data))
+        data = self.nodes[1].p + self.wo * hw  # 3 točka 4
+        vhandle.append(mesh.add_vertex(data))
+
+        # data = np.array([self.nodes[0].p]) + np.array(self.wo)*self.hw - np.cross(np.array([self.nodes[1].p]),np.array(self.wo))*(self.bf*0.5) #4 točak 5
+        # vhandle.append(mesh.add_vertex(data))
+
+        fh0 = mesh.add_face(vhandle[0], vhandle[1], vhandle[2]) #1-2-3
+        fh1 = mesh.add_face(vhandle[2], vhandle[1], vhandle[3]) #3-2-4
+
+
+
+        # ###TEST S RUCNIM UNOSOM TOCAKA###
+        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2]]) #0 točka 1
+        # vhandle.append(mesh.add_vertex(data))
+        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1], self.nodes[1].p[2]]) #1 točka 2
+        # vhandle.append(mesh.add_vertex(data))
+        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1], self.nodes[1].p[2]-1]) #2 točka 3
+        # vhandle.append(mesh.add_vertex(data))
+        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2]-1]) #3 točak 4
+        # vhandle.append(mesh.add_vertex(data))
+        #
+        #
+        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1]-0.25, self.nodes[1].p[2]-1]) #4 točka 5
+        # vhandle.append(mesh.add_vertex(data))
+        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1]-0.25, self.nodes[0].p[2]-1]) #5 točak 6
+        # vhandle.append(mesh.add_vertex(data))
+        #
+        #
+        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1]+0.25, self.nodes[1].p[2]-1]) #6 točka 7
+        # vhandle.append(mesh.add_vertex(data))
+        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1]+0.25, self.nodes[0].p[2]-1]) #8 točak 7
+        # vhandle.append(mesh.add_vertex(data))
+        #
+        #
+        # fh0 = mesh.add_face(vhandle[0], vhandle[1], vhandle[2]) #1-2-3
+        # fh1 = mesh.add_face(vhandle[0], vhandle[2], vhandle[3]) #1-3-4
+        #
+        # ####NERADI S 4 trokutra jer dolazi da moramo po treci puta prolaziti po istom pravcu
+        # # fh2 = mesh.add_face(vhandle[3], vhandle[2], vhandle[4]) #4-3-5
+        # # fh3 = mesh.add_face(vhandle[3], vhandle[4], vhandle[5]) #4-5-6
+        # # fh4 = mesh.add_face(vhandle[3], vhandle[2], vhandle[6])  # 4-3-7
+        # # fh5 = mesh.add_face(vhandle[3], vhandle[6], vhandle[7])  # 4-7-8
+        #
+        # fh2 = mesh.add_face(vhandle[4], vhandle[5], vhandle[7]) #5-6-8
+        # fh3 = mesh.add_face(vhandle[4], vhandle[7], vhandle[6]) #5-8-7
+
+
         pass
 
 class TriaElement(Element):
@@ -168,14 +240,14 @@ class StiffQuadElement(QuadElement):
         # print(self.nodes[3].x(], self.nodes[3].y(], self.nodes[3].z())
         # print(self.nodes[4].x(], self.nodes[4].y(], self.nodes[4].z())
         # print(self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2], "Ivan")
-        print("čvor 1")
-        print(self.nodes[0].p)
-        print("čvor 2")
-        print(self.nodes[1].p)
-        print("čvor 3")
-        print(self.nodes[2].p)
-        print("čvor 4")
-        print(self.nodes[3].p)
+        # print("čvor 1")
+        # print(self.nodes[0].p)
+        # print("čvor 2")
+        # print(self.nodes[1].p)
+        # print("čvor 3")
+        # print(self.nodes[2].p)
+        # print("čvor 4")
+        # print(self.nodes[3].p)
         # mesh = om.TriMesh()
         vhandle = []
         data = np.array([self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2]])
@@ -235,8 +307,8 @@ class GeoFEM(Geometry):
         mesh= om.TriMesh()
         for el in self.elements.values():
             el.updateMesh(mesh,self.mc)
-        self.mesh=mesh
         pass
+        self.mesh = mesh
 
     # def showFaceColorP(self, propDict):
     #     colors = [[0, 0, 255, 255], [128, 0, 128, 255], [222, 184, 135, 255], [255, 165, 0, 255], [0, 255, 0, 255],
