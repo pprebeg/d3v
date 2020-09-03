@@ -157,23 +157,10 @@ class SubDivBoxTree(dmnsn_aabb):
     def __init__(self,mesh):
         super().__init__()
         self.mesh=mesh
-        self._nf=0
         self.facets=[]
-        self.factsnp=0
         self.nodes=[]
-        self.nodesnp = np.empty(0)
         self._maxfacets=1000
         self.name=""
-
-    def getIntersectedLeafsNP(self,optray,t,intrsectLeafs):
-        if self.dmnsn_ray_box_intersection(optray,t):
-            if self._nf > 0:
-                intrsectLeafs.append(self)
-            else:
-                for node in self.nodesnp:
-                    node.getIntersectedLeafsNP(optray,t,intrsectLeafs)
-
-        return  len(intrsectLeafs) > 0
 
     def getIntersectedLeafs(self,optray,t,intrsectLeafs):
         if self.dmnsn_ray_box_intersection(optray,t):
@@ -201,10 +188,28 @@ class SubDivBoxTree(dmnsn_aabb):
         cgVect.setFromScalars(x/n,y/n,z/n)
         return cgVect
 
+    def calcFacetCG_new(fvs:[], points:[]):
+        x=0
+        y=0
+        z=0
+        n=len(fvs)
+        for iv in fvs:
+            p = points[iv]
+            x = x + p[0]
+            y = y + p[1]
+            z = z + p[2]
+            # test is point in box
+        cgVect=npvector3()
+        cgVect.setFromScalars(x/n,y/n,z/n)
+        return cgVect
+
     def createTreeRoot(self, box: BBox):
         #pass
-        self.createTreeRootList(box)
-        #self.createTreeRootNP(box)
+        ar_fv_indices = self.mesh.fv_indices().tolist()
+        ar_points = self.mesh.points().tolist()
+        #self.createTreeRootList(box)
+        self.createTreeRootListNew(box,ar_fv_indices,ar_points)
+
     def createTreeRootList(self,box:BBox):
         tsTR=time.perf_counter()
         self.setFromBBox(box)
@@ -215,26 +220,19 @@ class SubDivBoxTree(dmnsn_aabb):
         dtTR=time.perf_counter()-tsTR
         print("Tree creation time, s:", dtTR)
         #self.printTreeInfo()
-
-
-    def createTreeRootNP(self,box:BBox):
+    def createTreeRootListNew(self,box:BBox,fv_indices:[],points:[]):
         tsTR=time.perf_counter()
         self.setFromBBox(box)
-        ifh=0
-        self._nf=self.mesh.n_faces()
-        self.factsnp = np.empty(shape=(self._nf,), dtype=object)
-        for fh in self.mesh.faces():
-            self.factsnp[ifh]=fh
-            ifh=ifh+1
-        self.createTreeNP()
+        self.name="root"
+        nf=len(fv_indices)
+        for ifh in range(nf):
+            self.facets.append(ifh)
+        self.createTreeNew(fv_indices,points)
         dtTR=time.perf_counter()-tsTR
         print("Tree creation time, s:", dtTR)
+        #self.printTreeInfo()
 
-    def createTreeNP(self):
-        if self._nf > self._maxfacets:
-            self.subdivideOn2NP()
-            for node in self.nodesnp:
-                node.createTreeNP()
+
     def printTreeInfo(self):
         print(self.name, end="", flush=True)
         if self.isleaf:
@@ -250,6 +248,11 @@ class SubDivBoxTree(dmnsn_aabb):
             self.subdivideOn2()
             for node in self.nodes:
                 node.createTree()
+    def createTreeNew(self,fv_indices:[],points:[]):
+        if self.numFacets > self._maxfacets:
+            self.subdivideOn2New(fv_indices,points)
+            for node in self.nodes:
+                node.createTreeNew(fv_indices,points)
 
     def copy(self):
         cb=SubDivBoxTree(self.mesh)
@@ -272,9 +275,6 @@ class SubDivBoxTree(dmnsn_aabb):
     def numFacets(self):
         return len(self.facets)
 
-    @property
-    def numFacetsNP(self):
-        return self._nf
 
     def subdivideOn2(self):
 
@@ -308,14 +308,17 @@ class SubDivBoxTree(dmnsn_aabb):
         if sbox2.numFacets > 0:
             self.nodes.append(sbox2)
 
-    def subdivideOn2NP(self):
+    def subdivideOn2New(self,fv_indices:[],points:[]):
 
         dx = self.max.X- self.min.X
         dy = self.max.Y - self.min.Y
         dz = self.max.Z - self.min.Z
         dmax=max(dx,dy,dz)
         sbox1=self.copy()
+        sbox1.name=self.name+"_1"
         sbox2 = self.copy()
+        sbox2.name = self.name + "_2"
+        res=[sbox1,sbox2]
         if dx==dmax:
             sbox1.max.X=(self.max.X+ self.min.X)*0.5
             sbox2.min.X = sbox1.max.X
@@ -325,29 +328,18 @@ class SubDivBoxTree(dmnsn_aabb):
         else:
             sbox1.max.Z = (self.max.Z + self.min.Z) * 0.5
             sbox2.min.Z = sbox1.max.Z
-        ifh1 = 0
-        ifh2 = 0
-        factsnp1 = np.empty(shape=(self._nf,), dtype=object)
-        factsnp2 = np.empty(shape=(self._nf,), dtype=object)
-        for fh in self.factsnp:
-            fhCG=SubDivBoxTree.calcFacetCG(self.mesh,fh)
+        for ifh in self.facets:
+            fhCG=SubDivBoxTree.calcFacetCG_new(fv_indices[ifh], points)
             if sbox1.isIn(fhCG):
-                factsnp1[ifh1]=fh
-                ifh1 = ifh1 +1
+                sbox1.addFacet(ifh)
             else:
-                factsnp2[ifh2]=fh
-                ifh2 = ifh2 + 1
-        sbox1._nf=ifh1
-        sbox2._nf = ifh2
-        factsnp1.resize(ifh1,refcheck=False)
-        factsnp2.resize(ifh2,refcheck=False)
-        self._nf=0
-        self.factsnp=np.empty(shape=(0,), dtype=object)
-        self.nodesnp = np.empty(shape=(2,), dtype=object)
-        sbox1.factsnp=factsnp1
-        sbox2.factsnp = factsnp2
-        self.nodesnp[0] = sbox1
-        self.nodesnp[1] = sbox2
+                sbox2.addFacet(ifh)
+        self.clearFacets()
+        if sbox1.numFacets > 0:
+            self.nodes.append(sbox1)
+        if sbox2.numFacets > 0:
+            self.nodes.append(sbox2)
+
 
 class DefaultSelector(Selector):
     def __init__(self):
@@ -362,50 +354,6 @@ class DefaultSelector(Selector):
 
         dtS=time.perf_counter()-tSS
         print("Selection time, s:", dtS)
-
-    def selectNP(self, los, geometry):
-        if not len(geometry):
-            return
-        sis = []
-        intrsectLeafs = []
-        for geo in geometry:
-            isInBox = True
-            # 1. test bounding box
-            t=99999999
-            ray=dmnsn_ray(los)
-            opt_ray = dmnsn_optimized_ray(ray)
-            intrsectLeafs.clear()
-            isInBox = geo.subdivboxtree.getIntersectedLeafsNP(opt_ray,t,intrsectLeafs)
-            # 2. test mesh in intersected subdivision box tree leafs
-            if isInBox:
-                for leaf in intrsectLeafs:
-                    meshres = self.getMeshInterscectionSDBT(ray,leaf.factsnp, geo.mesh)
-                    if len(meshres) > 0:
-                        si = SelectionInfo()
-                        si.update(meshres[0], meshres[1], geo)
-                        sis.append(si)
-
-        # selected je selected geometry
-        # si je SelectionInfo --> sadrzi podatke o selekciji
-
-        if len(sis) > 0:
-            si = sis[0]
-            i = 1
-            while i < len(sis):
-                if sis[i].getDistance() < si.getDistance():
-                    si = sis[i]
-                i = i + 1
-            # nakon sto je selekcija odradjena
-            # fill in sve podatke u SelectionInfo object
-            # selected je selekcionirana geometrija
-            selected = si.getGeometry()
-            selected.onSelected(si)
-
-        else:
-            selected = None
-            si = SelectionInfo()
-        # obavijesti sve zainteresirane da je selekcija promijenjena
-        Signals.get().selectionChanged.emit(si)
 
     def selectList(self, los, geometry):
         if not len(geometry):
@@ -423,7 +371,7 @@ class DefaultSelector(Selector):
             # 2. test mesh in intersected subdivision box tree leafs
             if isInBox:
                 for leaf in intrsectLeafs:
-                    meshres = self.getMeshInterscectionSDBT(ray,leaf.facets, geo.mesh)
+                    meshres = self.getMeshInterscectionSDBTNew(ray,leaf.facets, geo.mesh)
                     if len(meshres) > 0:
                         si = SelectionInfo()
                         si.update(meshres[0], meshres[1], geo)
@@ -519,6 +467,36 @@ class DefaultSelector(Selector):
             d = self.rayIntersectsTriangleMollerTrumboreSDBT(ray, v0,v1,v2)
             if d != infinity:
                 intersectedFacets.append(fh)
+                intersectedFacetsDistances.append(d)
+        # Find the closest point
+        ii = -1
+        if len(intersectedFacets) > 0:
+            ii = 0
+        i = 1
+        while i < len(intersectedFacets):
+            if intersectedFacetsDistances[i] < intersectedFacetsDistances[ii]:
+                ii = i
+            i = i + 1
+        if ii > -1:
+            result.append(intersectedFacetsDistances[ii])
+            result.append(intersectedFacets[ii])
+        return result
+    def getMeshInterscectionSDBTNew(self, ray:dmnsn_ray, fhlist, mesh: om.TriMesh):
+        result = []
+        intersectedFacets = []
+        intersectedFacetsDistances = []
+        # Find all intersected facets
+        infinity = float("inf")
+        coords = []
+        points = mesh.points().tolist()
+        fv_indices = mesh.fv_indices().tolist()
+        for ifh in fhlist:
+            d = self.rayIntersectsTriangleMollerTrumboreSDBT(ray,
+                    points[fv_indices[ifh][0]],
+                    points[fv_indices[ifh][1]],
+                    points[fv_indices[ifh][2]])
+            if d != infinity:
+                intersectedFacets.append(ifh)
                 intersectedFacetsDistances.append(d)
         # Find the closest point
         ii = -1

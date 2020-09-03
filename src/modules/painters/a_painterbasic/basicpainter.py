@@ -348,25 +348,79 @@ class BasicPainter(Painter):
                                                    c[0], c[1], c[2], c[3])
         return
     def addMeshdata4oglmdl(self,key, geometry):
-        #tsAMD = time.perf_counter()
-        useMeshColor=True
+        tsAMD = time.perf_counter()
+        mesh = geometry.mesh
+        ar_fv_indices = mesh.fv_indices().tolist()
+        ar_points = mesh.points().tolist()
+
+        #color data
+        cstype=0 # color source type
+        useMeshColor = True
         if self.selType == 0:
             if self._si.geometry.guid == geometry.guid:
                 c = [1.0, 0.0, 1.0, 1.0]
                 useMeshColor = False
-        mesh = geometry.mesh
+            else:
+                c = [0.4, 1.0, 1.0, 1.0]  # default color
+        elif useMeshColor and mesh.has_face_colors():
+            ar_face_colors = mesh.face_colors()
+            cstype = 1
+        elif useMeshColor and mesh.has_vertex_colors():
+            ar_vertex_colors = mesh.vertex_colors()
+            cstype = 2
+        else:
+            c = [0.4, 1.0, 1.0, 1.0]  # default color
+
+        #normals data
         if not mesh.has_face_normals(): # normals are necessary for correct lighting effect
             mesh.request_face_normals()
             mesh.update_face_normals();
+        ar_face_normals= mesh.face_normals()
+
         nf = mesh.n_faces()
-        verts = mesh.vertices()
-        if not mesh.has_face_colors() and not mesh.has_vertex_colors():
-            if useMeshColor:
-                c = [0.4, 1.0, 1.0, 1.0] #default color
+
+        ifh=0
+        for ifh in range(nf):
+            fv=ar_fv_indices[ifh]
+            pp = []
+            cc = []
+            nn = []
+            n=ar_face_normals[ifh]
+            if cstype == 1:
+                c= ar_face_colors[ifh]
+
+            for iv in fv:
+                p = ar_points[iv]
+                if cstype == 2:
+                    c = ar_vertex_colors[iv]
+
+                if self._showBack:
+                    pp.append(p)
+                    nn.append(n)
+                    cc.append(c)
+
+                self.appendlistdata_f3xyzf3nf4rgba(key,
+                                                   p[0], p[1], p[2],
+                                                   n[0], n[1], n[2],
+                                                   c[0], c[1], c[2], c[3])
+
+            if self._showBack:
+                nv=len(pp)
+                for iv in range(nv):
+                    ivi=nv-1-iv
+                    self.appendlistdata_f3xyzf3nf4rgba(key,
+                                                       pp[ivi][0], pp[ivi][1], pp[ivi][2],
+                                                       -nn[ivi][0], -nn[ivi][1], -nn[ivi][2],
+                                                       cc[ivi][0], cc[ivi][1], cc[ivi][2], cc[ivi][3])
+        dtAMD = time.perf_counter() - tsAMD
+        print("Add mesh data total:", dtAMD)
+        return
+
         for fh in mesh.faces():
             pp = []
             cc=[]
             nn = []
+
             n=mesh.normal(fh)
 
             if useMeshColor and mesh.has_face_colors():
@@ -394,8 +448,7 @@ class BasicPainter(Painter):
                                                        -nn[ivi][0], -nn[ivi][1], -nn[ivi][2],
                                                        cc[ivi][0], cc[ivi][1], cc[ivi][2], cc[ivi][3])
 
-        #dtAMD = time.perf_counter() - tsAMD
-        #print("Add mesh data total:", dtAMD)
+
         return
 
     def addMeshdata4oglmdl_bkp(self,key, geometry):

@@ -13,7 +13,7 @@ import math as Math
 class HullFormMeshQuality:
     def __init__(self):
         self._numWL = 50
-        self._numPnWLhalf = 30
+        self._numPnWLhalf = 50
         self._distPolyOrder=3
 
     @property
@@ -80,7 +80,14 @@ class HullForm(Geometry):
         hmax=self.pdecks[0]
         #hmax=9.4
         #wlPos=self.hfmq.genWLPositions(hmax, 0)
-        wlPos = self.hfmq.genWLPositionsUsingObligatory(self.pdecks)
+        transomTip = self.shipdata["draft_val"] * self.shipdata["td_val"]
+        obligatoryWL= []
+        for dh in self.pdecks:
+            obligatoryWL.append(dh)
+        obligatoryWL.append(transomTip)
+        obligatoryWL.sort(reverse=True)
+
+        wlPos = self.hfmq.genWLPositionsUsingObligatory(obligatoryWL)
         #results = self.hullGen(self.shipdata, wlPos, self.hfmq.numPointsWLhalf)
         lines = self.hullGen(self.shipdata, wlPos, self.hfmq.numPointsWLhalf)
         self.wlinesPos = lines[0]  # positive y waterlines
