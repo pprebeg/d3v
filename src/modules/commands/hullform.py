@@ -305,11 +305,19 @@ class HullForm(Geometry):
         print(Xwl)
         return Xwl
 
+    def getIntersectionPoints(self, p1,p2,p3,h):
+        # p1 je s druge strane u odnosu na p2 i p3
+        ip1=0
+        ip2=0
+        ips = [ip1,ip2]
+        return ips
+
     def getAwl(self, hvl):
         mesh = self.mesh
         Awl = 0
         h = hvl
         lpowl=[]
+        lpbwl = []
         p = []
         for fh in mesh.faces():  # facet handle
             p.clear()
@@ -319,6 +327,8 @@ class HullForm(Geometry):
                 p.append(mesh.point(vh))
                 if p[i][2] > hvl:
                     lpowl.append(i)
+                else:
+                    lpbwl.append(i)
                 i=i+1
 
             if len(lpowl) < 1:
@@ -334,9 +344,11 @@ class HullForm(Geometry):
                 area = self.calcArea2DTria(Ax,Ay,Bx,By,Cx,Cy)
             elif len(lpowl) < 2:
                 # 2 trokuta
+                lip=self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]],h)
                 pass
             elif len(lpowl) < 3:
                 # 1 trokut
+                lip=self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]],h)
                 pass
             else:
                 area = 0
