@@ -131,7 +131,7 @@ class DialogHullFormHydrostaticCurves(QDialog):
         return button
 
     def refreshResults(self):
-        self.currentHullForm.getResults()
+        self.currentHullForm.getResults(9.4,1.025)
         pass
 
     def setCurrentHullForm(self, currentHullForm):

@@ -96,22 +96,194 @@ class HullForm(Geometry):
         self.mesh = self.genHullFormMeshPP(lines)
         pass
 
-    def getResults(self):
+    def getResultsOled(self):
         h=9.4
+        Xp = 50
         self.getVolume(h)
         self.getAwl(h)
         self.getXwl(h)
+        self.Ax(h,Xp)
         self.getKBzKBx(h)
         self.getIbIl(h)
         self.getHP(h)
-        self.getLwlBwlAx(h)
-        self.getKoef(h)
+        self.getLwlBwl(h)
+        self.getKoef(h,Xp)
         pass
 
-    def getLwlBwlAx(self, hvl):
+    def getResults(self,h,seaDensity):
+        results = []
+        fvs = self.mesh.fv_indices().tolist()
+        points = self.mesh.points().tolist()
+
+        bcwl = self.getBasicHullFormCharacteristicsForWL(h,fvs,points)
+        volume = bcwl[0]
+        area = bcwl[1]
+        xcg = bcwl[2]
+        Ib = bcwl[3]
+        Il = bcwl[4]
+        KBz = bcwl[5]
+        KBx = bcwl[6]
+        Lwl = bcwl[7]
+        Bwl = bcwl[8]
+
+        xmf= 50
+
+        mfarea = self.getMainFrameArea(xmf,h,fvs,points)
+
+        hsdata = self.getHydrostaticData(seaDensity,h,volume,area,Ib, Il,KBz, KBx,Lwl,Bwl,mfarea)
+
+        results = bcwl+hsdata
+        return results
+
+    def getBasicHullFormCharacteristicsForWL(self,h,fvs,points):
+
+        volume=0
+        area=0
+        xcg =0
+        Ib=0
+        Il=0
+        KBz=0
+        KBx=0
+        Lwl=0
+        Bwl=0
+        results = [volume,area,xcg,Ib,Il,KBz,KBx,Lwl,Bwl]
+        return results
+    def getMainFrameArea(self,x,h,fvs,points):
+        mfpoints = self.getSortedMainFramePoints(x,h,fvs,points)
+        area=0
+        return area
+    def getSortedMainFramePoints(self,x,h,fvs,points):
+        mfpoints=[]
+        lpr = []
+        lpl = []
+        for fv in fvs:
+            lpr.clear()
+            lpl.clear()
+            for iv in fv:
+                p = points[iv]
+                if p[0]< x: #and p[i][2]<h                    uvjet do zadane visine ne mijenja rezultat
+                    lpl.append(iv)                              #ovdje se spremaju vrhovi trokuta koji leže lijevo od xp
+                elif p[0]> x: #and p[i][2]<h:
+                    lpr.append(iv)                             # -||- desno od xp
+                else:
+                    mfpoints.append(p)
+            if len(lpl)>0 and len(lpr) > 0:
+                if len(lpl) < len(lpr):
+                    mfpoints.append(self.getIntersectionPoint(points[lpl[0]],points[lpr[0]],x,0))
+                    mfpoints.append(self.getIntersectionPoint(points[lpl[0]], points[lpr[1]], x, 0))
+                elif len(lpl) > len(lpr):
+                    mfpoints.append(self.getIntersectionPoint(points[lpl[0]],points[lpr[0]],x,0))
+                    mfpoints.append(self.getIntersectionPoint(points[lpl[1]], points[lpr[0]], x, 0))
+                else:
+                    mfpoints.append(self.getIntersectionPoint(points[lpl[0]],points[lpr[0]],x,0))
+                pass
+
+        #mfpoints=[[0,1,1],[0,2,21],[1,1,2],[10,0,0]]
+
+        mfpoints=sorted(mfpoints, key=lambda p: p[2])
+        return mfpoints
+
+    def Ax(self, hvl, Xp):  #Xp- presjek x osi
+        mesh = self.mesh
+        h = hvl
+        Ax = 0
+        lprXp = []
+        lplXp = []
+        p = []
+        area =0
+        for fh in mesh.faces():
+            # facet handle
+            p.clear()
+            lprXp.clear()
+            lplXp.clear()
+            i = 0
+            for vh in mesh.fv(fh):  # vertex handle
+                p.append(mesh.point(vh))
+
+                if p[i][0]<Xp: #and p[i][2]<h                    uvjet do zadane visine ne mijenja rezultat
+                    lplXp.append(i)                              #ovdje se spremaju vrhovi trokuta koji leže lijevo od xp
+                elif p[i][0]> Xp: #and p[i][2]<h:
+                    lprXp.append(i)                             # -||- desno od xp
+                    pass
+                i=i+1
+            if len(lplXp)==1 and len(lprXp)==1: #Xp prolazi kroz srednji vrh trokuta
+                j=0
+                p2 =[]
+                p2.clear()
+                for vh in mesh.fv(fh):  # vertex handle
+                    p2.append(mesh.point(vh))
+                    if p2[j][0]==Xp:          #program ne nalazi a za koji to vrijedi?
+                        a = j                 #a = index vrha trokuta kroz koji prolazi Xp
+                    j=j+1
+                lip = self.getIntersectionPoints(p[lprXp[0]],p[lplXp[0]],p[a],h,0)
+                area = 1/2* abs(lip[0][2]-lip[1][2])*(abs(lip[0][1])+abs(lip[1][1]))     #povrsina trapeza do y =0
+                pass
+            elif len(lprXp)==1 and len(lplXp)==2:         #
+                lip = self.getIntersectionPoints(p[lprXp[0]],p[lplXp[0]],p[lplXp[1]],h,0)
+                area = 1/2* abs(lip[0][2]-lip[1][2])*(abs(lip[0][1])+abs(lip[1][1]))
+
+                pass
+            elif len(lplXp)==1 and len(lprXp)==2:
+                lip = self.getIntersectionPoints(p[lplXp[0]],p[lprXp[0]],p[lprXp[1]],h,0)
+                area = 1/2* abs(lip[0][2]-lip[1][2])*(abs(lip[0][1])+abs(lip[1][1]))
+                pass
+            elif len(lprXp)==0 and len(lplXp)==2: #Xp prolazi kroz desni vrh trokuta
+                # j = 0
+                # p2 = []
+                # p2.clear()
+                # for vh in mesh.fv(fh):  # vertex handle
+                #     p2.append(mesh.point(vh))
+                #     if p2[j][0] == Xp:
+                #         a = j  # a = index vrha trokuta kroz koji prolazi Xp
+                #     j = j + 1
+                # lip = p[a]
+                area = 0
+                pass
+            elif len(lplXp)==0 and len(lprXp)==2: #Xp prolazi kroz lijevi vrh trokuta
+                # j = 0
+                # p2 = []
+                # p2.clear()
+                # for vh in mesh.fv(fh):  # vertex handle
+                #     p2.append(mesh.point(vh))
+                #     if p2[j][0] == Xp:
+                #         a = j  # a = index vrha trokuta kroz koji prolazi Xp
+                #     j = j + 1
+                # lip = p[a]
+                area = 0
+                pass
+            elif len(lplXp)==0 and len(lprXp)==1:      # slučaj ako je trokut pravokutan i Xp sjece dva vrha trokuta odjednom
+                                               #nedovršeno
+                pass
+            elif len(lprXp) == 0 and len(lplXp) == 1:
+
+                pass
+            Ax = Ax + area
+
+        print('Ax = ', Ax)
+        return Ax
+
+    def getHydrostaticData(self,seaDensity,h,volume,area,Ib, Il,KBz, KBx,Lwl,Bwl,mfarea):
+
+        MoB = Ib / volume
+        KMo = MoB + KBz
+        MlB = Il / volume
+        KMl = MlB + KBz
+        JZ = 0.01 * area * seaDensity
+
+        Cwl = area / (Lwl * Bwl)
+        CB = volume / (Lwl * Bwl * h)
+
+        CP = volume / (mfarea * Lwl)
+        CX = mfarea / (Bwl * h)
+        results = [MoB,KMo,MlB,KMl,JZ,Cwl,CB,CP,CX]
+
+        return results
+
+    def getLwlBwl(self, hvl):   #ne radi za svaki h nego samo za one sa vodnim linijama, takoder pretpostavka da je krma na 0
         mesh = self.mesh
         h = hvl
         Bwl = 0
+        Lwl =0
         for fh in mesh.faces():  # facet handle
             p = []
             for vh in mesh.fv(fh):  # vertex handle
@@ -169,17 +341,17 @@ class HullForm(Geometry):
         return Lwl, Bwl
 
 
-    def getKoef(self, hvl):
+    def getKoef(self, hvl,Xp):
         mesh = self.mesh
         h = hvl
         Lwl, Bwl = self.getLwlBwl(h)
         V = self.getVolume(h)
         Cwl = self.getAwl(h) / (Lwl * Bwl)
         CB = V / (Lwl * Bwl * h)
-        # CP = self.getVolume(h) / AX * Lwl
-        # CX = AX / Bwl * h
+        CP = self.getVolume(h) / (self.Ax(h,Xp) * Lwl)
+        CX = self.Ax(h,Xp) / (Bwl * h)
 
-        print(Cwl, CB)
+        print('CP=', CP, CX)
         return Cwl, CB
 
     def getHP(self, hvl):
@@ -196,7 +368,7 @@ class HullForm(Geometry):
         print(MoB, KMo, MlB, KMl, JZ)
         return MoB, KMo, MlB, KMl, JZ
 
-    def getIbIl(self, hvl):
+    def getIbIl(self, hvl):     #os prolazi kroz centar mase pa nebi trebalo racunat steinerov dodatak
         mesh = self.mesh
         h = hvl
         Ib = 0
@@ -225,7 +397,7 @@ class HullForm(Geometry):
                         Ib = Ib + r[0][1]**2 * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By)))
                         Il = Il + r[0][0] ** 2 * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By)))
 
-        print(Ib, Il)
+        #print(Ib, Il)
         return Ib, Il
 
     def getKBzKBx(self, hvl):
@@ -262,8 +434,8 @@ class HullForm(Geometry):
         KBz = KBz / self.getVolume(h)
         KBx = KBx / self.getVolume(h)
 
-        print(KBz)
-        print(KBx)
+        #print(KBz)
+        #print(KBx)
         return KBz, KBx
 
 
@@ -305,32 +477,47 @@ class HullForm(Geometry):
         print(Xwl)
         return Xwl
 
-    def getIntersectionPoints(self, p1,p2,p3,h):
-        # p1 je s druge strane u odnosu na p2 i p3
-        ip1=0
-        ip2=0
+    def getIntersectionPoints(self, p1,p2,p3,h, os):
+        ip1 = self.getIntersectionPoint(p1,p2,h, os)
+        ip2 =   self.getIntersectionPoint(p1,p3,h, os)
         ips = [ip1,ip2]
         return ips
+    def getIntersectionPoint(self, p1,p2,h, os):
+        ip1=0
+        if os == 2:             # os =2 je z os, a os=0 je x os, a to  je os koju zadana ravnina okomito sjece
+            ip1 = [(h-p2[2])/(p1[2]-p2[2])*(p1[0]-p2[0])+p2[0], (h-p2[2])/(p1[2]-p2[2])*(p1[1]-p2[1])+p2[1]  ,h]
+        if os == 0:                     #dodan uvjet jer se program zalio na dijeljenje s nulom
+            ip1 = [h, (h-p1[0])/(p2[0]-p1[0])*(p2[1]-p1[1])+p1[1], (h-p1[0])/(p2[0]-p1[0])*(p2[2]-p1[2])+p1[2]]
+
+        return ip1
+
+    def GetMainFramePoints(self, hmax):
+        mfp=[]
+        return mfp
+
+
+
 
     def getAwl(self, hvl):
         mesh = self.mesh
-        Awl = 0
         h = hvl
+        Awl = 0
         lpowl=[]
         lpbwl = []
         p = []
         for fh in mesh.faces():  # facet handle
             p.clear()
             lpowl.clear()
+            lpbwl.clear()
             i=0
             for vh in mesh.fv(fh):  # vertex handle
                 p.append(mesh.point(vh))
-                if p[i][2] > hvl:
+                if p[i][2] > h :
                     lpowl.append(i)
+
                 else:
                     lpbwl.append(i)
                 i=i+1
-
             if len(lpowl) < 1:
                 # A
                 Ax = p[0][0]
@@ -342,13 +529,18 @@ class HullForm(Geometry):
                 Cx = p[2][0]
                 Cy = p[2][1]
                 area = self.calcArea2DTria(Ax,Ay,Bx,By,Cx,Cy)
-            elif len(lpowl) < 2:
-                # 2 trokuta
-                lip=self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]],h)
                 pass
-            elif len(lpowl) < 3:
+            elif len(lpowl) ==1:
+                # 2 trokuta
+                lip=self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]],h,2)
+                area1 = self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[0]][0], p[lpbwl[0]][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
+                area2 = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
+                area = area1+area2
+                pass
+            elif len(lpowl) ==2:
                 # 1 trokut
-                lip=self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]],h)
+                lip=self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]],h,2)
+                area = self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[0]][0],p[lpbwl[0]][1])
                 pass
             else:
                 area = 0
