@@ -132,16 +132,16 @@ class BeamElement(Element):
 
     def updateMesh(self,mesh:om.TriMesh,mc:MeshControl):
         print("čvor 1")
-        print(self.nodes[0].p)
-        print(self.nodes[0].p[0])
-        print(self.nodes[0].p[1])
-        print(self.nodes[0].p[2])
-        print("čvor 1a")
-        print(self.nodes[0].p[0])
-        print(self.nodes[0].p[1])
-        print(self.nodes[0].p[2]-1)
-        print("čvor 2")
-        print(self.nodes[1].p)
+        # print(self.nodes[0].p)
+        # print(self.nodes[0].p[0])
+        # print(self.nodes[0].p[1])
+        # print(self.nodes[0].p[2])
+        # print("čvor 1a")
+        # print(self.nodes[0].p[0])
+        # print(self.nodes[0].p[1])
+        # print(self.nodes[0].p[2]-1)
+        # print("čvor 2")
+        # print(self.nodes[1].p)
 
         vhandle = []
 
@@ -149,14 +149,46 @@ class BeamElement(Element):
         tw=self.property.tw
         bf=self.property.bf
         tf = self.property.tf
+        x = self.nodes[0].p - self.nodes[1].p
+        y = self.wo
+        v = np.cross(x, y)
+        # z = self.nodes[0].p + self.wo*hw - (v*bf*0.5)
+        print(self.nodes[0].p)
+        print("x")
+        print(x)
+        # print("y")
+        # print(y)
+        print("v")
+        print(v)
+        print("wo")
+        print(self.wo)
+        print("hw")
+        print(hw)
+        print("wo*hw")
+        print(self.wo*hw)
+        # print("z")
+        # print(z)
 
-        vhandle.append(mesh.add_vertex(self.nodes[0].p))
-        vhandle.append(mesh.add_vertex(self.nodes[1].p))
+
+
+
+
+
+        vhandle.append(mesh.add_vertex(self.nodes[0].p)) #0 točka 1
+        vhandle.append(mesh.add_vertex(self.nodes[1].p)) #1 točka 2
 
 
         data = self.nodes[0].p + self.wo*hw  #2 točka 3
         vhandle.append(mesh.add_vertex(data))
         data = self.nodes[1].p + self.wo * hw  # 3 točka 4
+        vhandle.append(mesh.add_vertex(data))
+        data = self.nodes[0].p + self.wo*hw - (v*bf*0.5)  #4 točka 5
+        vhandle.append(mesh.add_vertex(data))
+        data = self.nodes[1].p + self.wo*hw - (v*bf*0.5)  #5 točka 6
+        vhandle.append(mesh.add_vertex(data))
+        data = self.nodes[1].p + self.wo*hw + (v*bf*0.5)  #6 točka 7
+        vhandle.append(mesh.add_vertex(data))
+        data = self.nodes[0].p + self.wo*hw + (v*bf*0.5)  #7 točka 8
         vhandle.append(mesh.add_vertex(data))
 
         # data = np.array([self.nodes[0].p]) + np.array(self.wo)*self.hw - np.cross(np.array([self.nodes[1].p]),np.array(self.wo))*(self.bf*0.5) #4 točak 5
@@ -164,6 +196,8 @@ class BeamElement(Element):
 
         fh0 = mesh.add_face(vhandle[0], vhandle[1], vhandle[2]) #1-2-3
         fh1 = mesh.add_face(vhandle[2], vhandle[1], vhandle[3]) #3-2-4
+        fh1 = mesh.add_face(vhandle[4], vhandle[5], vhandle[6]) #5-6-7
+        fh1 = mesh.add_face(vhandle[4], vhandle[6], vhandle[7])  # 5-7-8
 
 
 

@@ -29,6 +29,20 @@ class MaestroXML:
             node = fem.getNode(int(idNod))
             elem.addNode(node)
         fem.addElement(elem)
+    def processMaestroModule(self,module):
+        for item in module:
+            if item.tag =='StrakeList':
+                for strake in item:
+                    pass
+            elif item.tag =='CompaundList':
+                print ('Maestro Structural Element Type not implemented:' + item.tag)
+            elif item.tag =='BarList':
+                print ('Maestro Structural Element Type not implemented:' + item.tag)
+            elif item.tag =='QuadList':
+                print ('Maestro Structural Element Type not implemented:' + item.tag)
+            elif item.tag =='RodList':
+                print ('Maestro Structural Element Type not implemented:' + item.tag)
+
     def readModelToGeoFEM(self,fem:GeoFEM):
         fname = self.xmlpath
         tree = ET.parse(fname)
@@ -44,12 +58,15 @@ class MaestroXML:
         groups = 0
         evaluation = 0
         units =0
+        coarseMesh=0
         for child in root:
+            tag0=child.tag
             for ch in child:
                 #print(ch.tag, ch.attrib)
                 sname=(ch.attrib['sName'])
                 if sname == 'Maestro':
                     units = ch[0][0]
+                    coarseMesh =ch[1][1][0]
                 elif sname=='FeModel':
                     jobctrl=ch[0][0][0]
                     nodes = ch[0][0][1]
@@ -80,6 +97,24 @@ class MaestroXML:
             if item.attrib['sTag']== "force":
                 fem.units.name_force=item.attrib['sLabel']
                 fem.units.user2si_force = getFloat(item,"dUserToSI")
+        for sub0 in coarseMesh:
+            if sub0.tag=='module':
+                self.processMaestroModule(sub0)
+            else:
+                for sub1 in sub0:
+                    if sub1.tag == 'module':
+                        self.processMaestroModule(sub1)
+                    else:
+                        for sub2 in sub1:
+                            if sub2.tag == 'module':
+                                self.processMaestroModule(sub2)
+                            else:
+                                for sub3 in sub2:
+                                    if sub3.tag == 'module':
+                                        self.processMaestroModule(sub3)
+                                    else:
+                                        print ('Nesting of substructures of level > 4 not implemented')
+
         for item in materials:
             material = Material()
             material.init(getInt(item, 'iTag'),item.attrib['sName'])
