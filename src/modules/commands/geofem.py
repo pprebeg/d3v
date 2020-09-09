@@ -2,6 +2,7 @@ import openmesh as om
 from enum import Enum
 import numpy as np
 from geometry import Geometry
+import pathlib
 
 class ViewType(Enum):
     """!
@@ -16,6 +17,9 @@ class ViewType(Enum):
 class MeshControl():
     def __init__(self):
         self.viewtype=ViewType.solid
+        self.useviewtreshold=False
+        self.uppertreshold=0
+        self.lowertreshold = 0
         pass
 class Property ():
     def __init__(self):
@@ -110,9 +114,13 @@ class Element(GeoEntity):
         super().__init__()
         self.property = 0
         self.nodes = []
+        self.face_value=0
+        self.vertex_based_values=[]
+        self.value_name=""
         pass
     def addNode(self,node):
         self.nodes.append(node)
+        self.vertex_based_values.append(0)
     def init(self,id):
         super().init(id)
     def updateMesh(self,mesh:om.TriMesh,mc:MeshControl):
@@ -298,6 +306,7 @@ class StiffQuadElement(QuadElement):
         # return mesh
         # pass
 
+
 class Units():
     def __init__(self):
         self.user2si_length=1
@@ -305,6 +314,40 @@ class Units():
         self.name_length='m'
         self.name_force = 'N'
         pass
+class MaestroElementAssociation():
+    def __init__(self):
+        self.strakeGirder2fe = {}
+        self.strakePlate2fe = {}
+        self.strakeFrame2fe = {}
+        self.endPoint2node = {}
+        self.endPointStrakes = {}
+
+    def addStrakePlate(self,key:int,elList:[]):
+        self.strakePlate2fe[key]=elList
+    def addStrakeGirder(self,key:int,elList:[]):
+        self.strakeGirder2fe[key]=elList
+    def addStrakeFrame(self,key:int,elList:[]):
+        self.strakeFrame2fe[key]=elList
+    def addEndPointNode(self,key:int,nodeFeTag:int):
+        feTagList = self.endPoint2node.setdefault(key,[])
+        feTagList.append(nodeFeTag)
+
+    def addEndPointStrake(self, key:int, strakeID:int):
+        strakeList = self.endPointStrakes.setdefault(key,[])
+        strakeList.append(strakeID)
+
+class LusaElementAssociation():
+    def __init__(self):
+        self.spc2fe = {}
+        self.plate2fe = {}
+        self.hc2fe = {}
+
+    def addPlate(self, key:int, strakeID):
+        self.plate2fe[key]=strakeID
+    def addSPC(self,key:int,strakeID):
+        self.spc2fe[key]=strakeID
+    def addHC(self,key:int,strakeID):
+        self.hc2fe[key]=strakeID
 
 class GeoFEM(Geometry):
     def __init__(self):
@@ -318,6 +361,11 @@ class GeoFEM(Geometry):
         self.meshcontrol = 0
         self.units= Units()
         self.mc = MeshControl()
+        self.mas = MaestroElementAssociation()
+        self.lusaresult= 0
+
+
+
         pass
     def addNode(self,item):
         self.nodes[item.id]=item
@@ -337,12 +385,15 @@ class GeoFEM(Geometry):
         self.materials[item.id]=item
     def addStiffLayout(self, item):
         self.stiflayouts[item.id] = item
+
     def regenerate(self):
         mesh= om.TriMesh()
         for el in self.elements.values():
             el.updateMesh(mesh,self.mc)
         pass
         self.mesh = mesh
+
+
 
     # def showFaceColorP(self, propDict):
     #     colors = [[0, 0, 255, 255], [128, 0, 128, 255], [222, 184, 135, 255], [255, 165, 0, 255], [0, 255, 0, 255],
@@ -377,3 +428,167 @@ class GeoFEM(Geometry):
     #     if len(self.legendValues)> 0:
     #         self.drawLegend=True
     #     pass
+
+
+class Result():
+    def __init__(self, name):
+        self.name = name
+        pass
+
+
+class GeneralResultsDictionary(Result):
+    def __init__(self, name):
+        super().__init__(name)
+        self.results = {}
+        self.valueNames = []
+        self.keyName = ""
+        pass
+
+    def initilizeResultDictionary(self, keyName, valueNames):
+        self.keyName = keyName
+        self.valueNames = [valueNames]
+
+    def addValues(self, key, values: []):
+        self.results[key] = values
+
+    def addValues2(self, key, values: list):
+        self.results[key] = values.copy()
+
+    def getValues(self, key):
+        return self.results[key]
+
+    def getValue(self, key, index: int):
+        return self.results[key][index]
+
+    def appdendListwithResultData(self, x: list, y: list, iresx: int, iresy: int):
+        for res in self.results.values():
+            x.append(res[iresx])
+            y.append(res[iresy])
+
+    def appdendListwithKeyPairedResultData(self, x: list, y: list, iresy: int):
+        for key, res in self.results:
+            x.append(key)
+            y.append(res[iresy])
+
+
+class ElementResult(Result):
+    def __init__(self, name):
+        super().__init__(name)
+        self.feres = {}
+        pass
+
+    def getValue(self, fe: Element):
+        return self.feres[fe.id]
+
+    def addValue(self, fe: Element,value):
+        self.feres[fe.id]=value
+
+
+class FEMModelResults:
+    def __init__(self, name):
+        self.name = name
+        pass
+
+    def readOutput(self, path):
+        pass
+
+    def setResultsToModel(self, fem: GeoFEM):
+        pass
+
+
+class LusaResults(FEMModelResults):
+    def __init__(self, name, mas:MaestroElementAssociation):
+        super().__init__(name)
+        self.las = LusaElementAssociation()
+        self.mas=mas
+        self.lers = {} #Lusa element results
+        pass
+
+    def readOutput(self, path):
+        filename='LUSAhoggCSD.OUT'
+        abspath1 = '\\'.join(path.split('\\')[0:-1])
+        abspath2 = '/'.join(path.split('/')[0:-1])
+        if len(abspath2) > len(abspath1):
+            abspath = abspath2 + '/' + filename
+        else:
+            abspath = abspath1 + '\\' + filename
+        self.readCSDFile(abspath)
+        pass
+
+    def readCSDFile(self,path):
+        file=pathlib.Path(path)
+        if not file.exists():
+            return
+        f = open(path, "r")
+        nlines2skip=0
+        isSPCdata=False
+        isGPCdata = False
+        isHCdata = False
+        collapse_stress = ElementResult('Collapse Stress')
+        self.lers[collapse_stress.name]=collapse_stress
+        collapse_mod = ElementResult('Collapse Mod')
+        self.lers[collapse_mod.name] = collapse_mod
+        collapse_cycle = ElementResult('Collapse Cycle')
+        self.lers[collapse_cycle.name] = collapse_cycle
+        for line in f:
+            if  nlines2skip > 0:
+                nlines2skip=nlines2skip-1
+                continue
+            line = ' '.join(line.split())
+            if line.startswith('*'):
+                continue
+            if line == "" or line == " ":
+                continue
+
+            if 'Stiffener - Plate Combinations (SPCs)' in line:
+                nlines2skip=4
+                isSPCdata=True
+                continue
+            if 'Girder - Plate Combinations (GPCs)' in line:
+                nlines2skip=4
+                isGPCdata=True
+                isSPCdata=False
+                continue
+            if 'Hard Corners (HCs)' in line:
+                nlines2skip = 4
+                isGPCdata = False
+                isHCdata = True
+                continue
+            sline = line.split(" ")
+            if  len(sline)== 0:
+                continue
+
+            if isSPCdata:
+                if len(sline) > 5:
+                    strakeNo    = int(sline[0])
+                    elNo        = int(sline[1])
+                    self.las.addPlate(elNo,strakeNo)
+                    collapse_stress.addValue(elNo,float(sline[2]))
+                    collapse_mod.addValue(elNo, float(sline[3]))
+                    collapse_cycle.addValue(elNo, float(sline[4]))
+            elif isGPCdata:
+                if len(sline) > 5:
+                    strakeNo    = int(sline[0])
+                    elNo        = int(sline[1])
+                    self.las.addSPC(elNo, strakeNo)
+                    collapse_stress.addValue(elNo, float(sline[2]))
+                    collapse_mod.addValue(elNo, float(sline[3]))
+                    collapse_cycle.addValue(elNo, float(sline[4]))
+            elif isHCdata:
+                if len(sline) > 5:
+                    endPtNo    = int(sline[0])
+                    elNo        = int(sline[1])
+                    self.las.addHC(elNo, endPtNo)
+                    collapse_stress.addValue(elNo, float(sline[2]))
+                    collapse_mod.addValue(elNo, float(sline[3]))
+                    collapse_cycle.addValue(elNo, float(sline[4]))
+
+
+
+
+
+        f.close()
+        pass
+
+    def setResultsToModel(self, fem: GeoFEM):
+        pass

@@ -1,5 +1,5 @@
 from geofem import GeoFEM,Node,StiffQuadElement, Material, BeamProperty,StiffLayoutProperty,PlateProperty
-from geofem import StiffTriaElement, BeamElement, RodElement,Element
+from geofem import StiffTriaElement, BeamElement, RodElement,Element,LusaResults
 import  numpy as np
 import uuid
 import xml.etree.ElementTree as ET
@@ -16,6 +16,11 @@ def getNPVector(item, key):
     npVec=  (np.array(item.attrib[key].split(','))).astype(np.float)
     return  npVec
 
+def getIntList(item, key):
+    intList=  (np.array(item.attrib[key].split(','))).astype(np.int)
+    intList = intList.tolist()
+    return  intList
+
 
 class MaestroXML:
 
@@ -29,10 +34,27 @@ class MaestroXML:
             node = fem.getNode(int(idNod))
             elem.addNode(node)
         fem.addElement(elem)
-    def processMaestroModule(self,module):
+    def processMaestroModule(self,module,fem:GeoFEM):
         for item in module:
             if item.tag =='StrakeList':
                 for strake in item:
+                    strakeID = getInt(strake, 'iTag')
+                    ep1=getInt(strake,'EndPt0')
+                    ep2=getInt(strake,'EndPt1')
+                    fem.mas.addEndPointStrake(ep1,strakeID)
+                    fem.mas.addEndPointStrake(ep2, strakeID)
+                    for att in strake:
+                        if 'sFeTag' not in att.attrib:
+                            continue
+                        if att.tag == 'Plate':
+                            idList=getIntList(att,'sFeTag')
+                            fem.mas.addStrakePlate(strakeID,idList)
+                        elif att.tag == 'Frame':
+                            idList=getIntList(att,'sFeTag')
+                            fem.mas.addStrakeFrame(strakeID, idList)
+                        elif att.tag == 'Girder':
+                            idList=getIntList(att,'sFeTag')
+                            fem.mas.addStrakeGirder(strakeID, idList)
                     pass
             elif item.tag =='CompaundList':
                 print ('Maestro Structural Element Type not implemented:' + item.tag)
@@ -103,7 +125,7 @@ class MaestroXML:
             else:
                 for sub1 in sub0:
                     if sub1.tag == 'module':
-                        self.processMaestroModule(sub1)
+                        self.processMaestroModule(sub1,fem)
                     else:
                         for sub2 in sub1:
                             if sub2.tag == 'module':
@@ -183,5 +205,8 @@ class MaestroXML:
         # for item in evaluation:
         #     print(item.tag)
             # print(item.attrib)
+        lusaresult = LusaResults('Lusa Results',fem.mas)
+        lusaresult.readOutput(self.xmlpath)
+        fem.lusaresult=lusaresult
 
 pass
