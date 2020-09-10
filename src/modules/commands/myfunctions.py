@@ -2,9 +2,25 @@ import openmesh as om
 import numpy as np
 import copy
 import rotm as rm
+import sys
 
 from mpl_toolkits import mplot3d
 import matplotlib.pyplot as plt
+
+
+
+#fv_indices = geometry.mesh.fv_indices().tolist())
+
+#points = geometry.mesh.points().tolist())
+
+#for fv in fv_indices:
+
+ #   for iv in fv:
+#
+ #       p = points[iv]
+
+ #       i = i + 1
+
 
 def print_data(mesh, report):
 
@@ -429,7 +445,20 @@ def make_form(scale = 5, move_vector = np.array([0.,0.,0.])):
 	
 	return mesh
 	
+def make_deck_halfplane(a, z, move_vector = np.array([0.,0.,0.])):
+	mesh = om.TriMesh()
+	vh = []
+	fh = []
+	#points = np.array([[-a,0,z], [a,0,z], [a,a,z], [-a,a,z]], dtype = "float64") + move_vector
+	points = np.array([[-a / 2, 0, z], [a / 2, 0, z], [a / 2, a / 8, z], [-a / 2, a / 8, z]],
+					  dtype="float64") + move_vector
+	for point in points: 
+		vh.append(mesh.add_vertex(point))
 	
+	mesh.add_face(vh[0], vh[1], vh[2])
+	mesh.add_face(vh[2], vh[3], vh[0])
+	
+	return mesh
 
 #def is_outside_mesh(point, mesh):
 #	outside_check_array = np.empty((0))
@@ -592,6 +621,10 @@ def make_supertriangle(points, report):			#problem u best fitting plane normali;
 	for point in supertriangle_points:
 		vhandles.append(supertriangle.add_vertex(point))
 	fhandles.append(supertriangle.add_face(vhandles[0],vhandles[1],vhandles[2]))
+	#fh = supertriangle.face_handle(0)
+	#cent = supertriangle.calc_face_centroid(fh)
+	#vh = supertriangle.add_vertex(cent)
+	#supertriangle.split(fh, vh)
 	
 	return supertriangle
 	
@@ -603,6 +636,18 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 	report.write("input points: \n" + str(points) + "\n\n")
 	mesh = make_supertriangle(points, report)
 	start_points = copy.copy(mesh.points())
+	fig=plt.figure()
+	axes = plt.axes(projection='3d')
+	axes.set_xlabel("x")
+	axes.set_ylabel("y")
+	axes.set_zlabel("z")
+	
+	#ako ima samo 3 pointa u pointovima:  generiraj face
+	#if points.shape[0] == 3:
+	#	mesh = om.TriMesh(points, np.array([[0,1,2]]))
+	
+	
+	#else:
 	
 	
 	
@@ -647,7 +692,14 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 			mesh.delete_face(fh, False)
 		mesh.garbage_collection()
 		
+		#for fh in mesh.faces():
+		#	fvi = mesh.face_vertex_indices()[fh.idx()]
+		#	face_points = mesh.points()[fvi]
+		#	plot_face()
 		
+		#plt.show()
+		#inpout()
+		#plt.clf()
 		
 		#for fh in badTriangles.faces():				#nisu isti fh!!
 		#	mesh.delete_face(fh, False)			#false da ne deleta izolirane vertexe
@@ -686,9 +738,28 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 	
 	report.write("all points before deleting all vertices: \n" + str(mesh.points()) + "\n\n")		
 	
+
 	#delete start vertices	: brise i stvari koje nisu start pointovi
 	#vh iz starta nije isti na kraju
 	#algoritam ima problema: izbacuje izolirane vertekse(ne popunjava ih sve) najvj jer u nekeom koraku se brisu sva tri facea na koji je vertex spojen; provjeri jos u reportu!!!!!!!!!!!!!!!
+	
+	
+	
+	
+	
+	
+	for fh in mesh.faces():
+		fvi = mesh.face_vertex_indices()[fh.idx()]
+		fp = mesh.points()[fvi]
+		plot_face(fp, axes)
+	
+	
+	
+	
+	
+	
+	
+	
 	for vh in mesh.vertices():
 		vpoint = mesh.points()[vh.idx()]
 		for start_point in start_points:
@@ -712,7 +783,9 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 	#		isloated_points = np.append(isloated_points, mesh.points()[vi], axis = 0)
 		
 	#report.write("isolated points: \n" + str(points) + "\n\n")
-	
+
+		
+			
 	return mesh
 
 
@@ -1162,6 +1235,39 @@ def slice_mesh(mesh, intersection_points, inside_points, outside_points, report)
 #			report.write("\n bad fvi with complex edge: " + str(fvi) + "\nwith points\n" + str(sliced_mesh.points()[fvi]))
 #		else:
 #			report.write("\ngood triangularization with: " + str(fvi) + "\n")
+
+
+
+def plot_triange_circumcircle(triangle_points, axes, color = "blue"):
+	c = calc_triangle_circumcenter(triangle_points)
+	n = np.cross((triangle_points[0] - triangle_points[1]), (triangle_points[0] - triangle_points[2]))
+	r = np.sum((c - triangle_points[0])**2 , axis = 0)**0.5
+	n_points = 100
+	theta = np.expand_dims(np.linspace(0, 2 * np.pi, n_points), 0).T
+	z = np.full((n_points,1), 0)
+	x = np.cos(theta) * r
+	y = np.sin(theta) * r
+	circumcircle_points = np.squeeze(np.array([x,y,z]).T, 0) + c
+	circumcircle_points = rm.rotate_points_to_fit_plane_normal(circumcircle_points, n)
+	circ1 = axes.plot(circumcircle_points[:,0],circumcircle_points[:,1],circumcircle_points[:,2], color = color)
+	
+def plot_face(points, axes, color = "red"):
+	for i in range(points.shape[0]):
+		point1 = points[i]
+		point2 = points[(i + 1) % points.shape[0]]
+		plot_points = np.empty((0,3))
+		plot_points = np.append(plot_points, np.expand_dims(point1, 0), 0)
+		plot_points = np.append(plot_points, np.expand_dims(point2, 0), 0)
+		side = axes.plot(plot_points[:,0], plot_points[:,1], plot_points[:,2], color = color)
+
+
+
+
+
+
+
+
+
 			
 
 def subdivide_mesh(mesh_list, c = 0 ,n = 1): #face po face subdividamo n puta,c je counter
@@ -1278,14 +1384,14 @@ def plot3D(points_list):
 	
    
 			
-#def cut_meshes2(block, form , report):					#outside points ne radi dobro
-#	intersection_points = get_meshes_intersections(block, form)
-#	outside_points = get_outside_points(block, form)
-#	mesh = BowyerWatson_triangulation_algorithm_backup(intersection_points, report)
-#	print(intersection_points)
-#	print(outside_points)
-#	print(block.points())
-#	return mesh
+def cut_meshes2(block, form , report):					#outside points ne radi dobro
+	intersection_points = get_meshes_intersections(block, form)
+	outside_points = get_outside_points(block, form)
+	mesh = BowyerWatson_triangulation_algorithm_backup(intersection_points, report)
+	print(intersection_points)
+	print(outside_points)
+	print(block.points())
+	return mesh
 	
 #specijalizirano za faceve; unosimo 3 pointa; 4 point je 0,0,0 -> jednostavnija formula
 def calc_face_volume(face_points):
@@ -1321,6 +1427,7 @@ def cut_meshes(block_mesh, form_mesh):
 			form_inside_points = form_data["inside points"]
 			form_outside_points = form_data["outside points"]
 			if form_inside_points.shape[0] == 0 or block_inside_points.shape[0] == 0:
+				pass
 				block_mesh = subdivide_mesh([block_mesh])
 				form_mesh = subdivide_mesh([form_mesh])
 			else:

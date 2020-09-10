@@ -12,7 +12,7 @@ import time
 
 class HullFormMeshQuality:
     def __init__(self):
-        self._numWL = 10
+        self._numWL = 20
         self._numPnWLhalf = 10
         self._distPolyOrder=3
 
@@ -763,7 +763,7 @@ class HullForm(Geometry):
                 whsi.append(mesh.add_vertex(p))
 
         self._genFaces(mesh,whsPos,True)
-        self._genFaces(mesh, whsNeg,False)
+        #self._genFaces(mesh, whsNeg,False)
 
         return mesh
 

@@ -16,7 +16,7 @@ from PySide2.QtGui import (QBrush, QColor, QConicalGradient, QFont,
 from PySide2.QtWidgets import *
 import numpy as np
 import sys
-
+import os
 
 class AddBlock_Dialog(object):
 	def setupUi(self, Dialog):
@@ -363,9 +363,56 @@ class SetPosition_Dialog(object):
 
 
 
+class ImportFromCsvMenu_Dialog(object):
+	def setupUi(self, Dialog):
+		if Dialog.objectName():
+			Dialog.setObjectName(u"Dialog")
+		Dialog.resize(240, 102)
+		self.buttonBox = QDialogButtonBox(Dialog)
+		self.buttonBox.setObjectName(u"buttonBox")
+		self.buttonBox.setGeometry(QRect(20, 60, 221, 41))
+		self.buttonBox.setOrientation(Qt.Horizontal)
+		self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
+		self.PathLabel = QLabel(Dialog)
+		self.PathLabel.setObjectName(u"PathLabel")
+		self.PathLabel.setGeometry(QRect(10, 10, 121, 16))
+		self.PathLine = QLineEdit(Dialog)
+		self.PathLine.setObjectName(u"PathLine")
+		self.PathLine.setGeometry(QRect(10, 30, 200, 20))
 
+		self.retranslateUi(Dialog)
+		self.buttonBox.accepted.connect(Dialog.accept)
+		self.buttonBox.rejected.connect(Dialog.reject)
 
+		QMetaObject.connectSlotsByName(Dialog)
+	# setupUi
 
+	def retranslateUi(self, Dialog):
+		Dialog.setWindowTitle(QCoreApplication.translate("Dialog", u"Import from csv", None))
+		self.PathLabel.setText(QCoreApplication.translate("Dialog", u"Path to Folder:", None))
+		self.PathLine.setText("")
+	# retranslateUi
+
+	def getInput(self):
+		return self.PathLine.text()
+	
+	def run(self):
+		Form = QDialog()		#Form je oblik ; Qwidget je emptybox a Qdialogue je menu sa ok i cancel
+		#self = AddForm_Dialog()		#ui je sta se sve nalazi u menu
+		self.setupUi(Form)		#setappa ui (ocito)
+		Form.exec()				#show je preview pogledaj modal dialogue u dokumentaciji (modalni blokiraju acsess ostatku aplikacije dok nije zavrsena)	#pokrece novi menu
+		if Form.result() == True:  #ako je pritisnut ok
+			while True:
+				path = self.getInput()
+				if os.path.isdir(path) == False:
+					print("Path not valid.")
+					Form.exec()
+					if Form.result() == False:
+						break
+				else:
+					print(path)
+					return path
+					break
 
 
 

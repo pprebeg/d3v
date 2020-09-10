@@ -7,6 +7,7 @@ import numpy as np
 import copy
 import myfunctions as mf
 from hullform import HullForm
+import csv
 
 class DBBGeometry (Geometry):
 	def __init__(self):
@@ -19,9 +20,9 @@ class DBBGeometry (Geometry):
 class DBBProblem ():
 	def __init__(self,fileName):
 		self.filename=fileName
-		self.hull =0
-		self.decks =[]
-		self.dbbs=[]
+		self.hull = 0
+		self.decks = []
+		self.dbbs = []
 
 
 		if (fileName != ""):
@@ -29,33 +30,84 @@ class DBBProblem ():
 
 
 	def readProblem(self):
-		fnhull = "dsfdsaf" # iz dbb datoteke učitati
-		self.hull= DBBHullForm(fnhull)
-		for deckIndex in range(len(self.hull.pdecks)):
-			self.decks.append(DBBDeck(self.hull,deckIndex))
-		pass
+		with open(self.filename, newline='') as csvfile:
+			hfr = csv.reader(csvfile, delimiter='\t', quotechar='|')
+			data = []
+			for row in hfr:
+				rown = []
+				for x in row:
+					rown.append(x)
+				data.append(rown)
 
+
+		abspath1 = '\\'.join(self.filename.split('\\')[0:-1])
+		abspath2 = '/'.join(self.filename.split('/')[0:-1])
+		if len(abspath2) > len(abspath1):
+			abspath = abspath2 + '/'
+		else:
+			abspath = abspath1 + '\\'
+
+
+		huf_path = abspath + data[0][1]
+		block_data_path = abspath + data[1][1]
+		#make hull from huf file:
+		self.hull= DBBHullForm(huf_path)
+		deckz_list= self.hull.pdecks
+		deckz_list = []
+		deckz_list.append(self.hull.pdecks[2])
+		deckz_list.append(self.hull.pdecks[3])
+		#deckz_list.append(self.hull.pdecks[4])
+		for deckIndex in range(len(deckz_list)):
+			self.decks.append(DBBDeck(self.hull, deckz_list[deckIndex], deckIndex)) 
+			
+		#make blocks
+		with open(block_data_path, "r") as csv_file:
+			csv_reader = csv.DictReader(csv_file)
+			for row in csv_reader:	#each row contains 1 block data
+				deck  = int(row["deck"])
+				Ax = float(row["Ax"])
+				Ay = float(row["Ay"])	
+				Az = self.decks[deck].z
+				x = float(row["x"])
+				y = float(row["y"])
+				
+				try:
+					z = self.decks[deck - 1].z - self.decks[deck].z
+				except IndexError:
+					print("Invalid deck position")
+				else:
+					block_dims = np.array([x,y,z])
+					position_A = np.array([Ax,Ay])
+				
+					block = DBB(self.hull, self.decks[deck],block_dims,position_A)
+					self.dbbs.append(block)
+				
+				
 	def testProblem(self, scale, block_dims):
 		self.hull= DBBHullForm("", scale)
 		self.dbbs.append(DBB(self.hull,0))
 		#self.dbbs[-1].setPosition(np.array([0,0,0]))
-		self.dbbs[-1].testMesh(block_dims)
+		self.dbbs[-1].genMesh(block_dims)
 
 		#self.dbbs.append(DBB(self.hull, 0))
 		#self.dbbs[-1].setPosition(0, -1, -4)
 		#self.dbbs[-1].testMesh()
 
+		
+		
+		
 class DBBHullForm (HullForm):
-	def __init__(self, fileName, scale):
-		super().__init__(fileName)
+	def __init__(self, fileName, scale = 1):
+		super().__init__(fileName)		#vec u inicijalizaciji stvara formu
 		self.position = np.array([0.,0.,0.])
-		if (fileName != ""):
-			self.readHullForm()
-		else:
-			self.testMesh(scale)
+		self.centroid = np.array([0.,0.,0.])
+		self.LOA = self.shipdata["loa_val"]
+		self.centroid = np.array([self.LOA / 2, 0, 0])  # sredina samo za x za sada
+	
 
-	def readHullForm(self):
-		pass
+	#def readHullForm(self):
+		#HullForm.__init__()
+
 
 	def regenerateMesh(self):
 		self.mesh = mf.make_form(scale = self.scale, move_vector = self.position)
@@ -76,27 +128,20 @@ class DBBHullForm (HullForm):
 
 		
 class DBBDeck (Geometry):
-	def __init__(self, hullform, deckIndex):
+	def __init__(self, hullform, z, deckIndex):
 		super().__init__()
-		self.hullform=hullform
-		self.z=hullform.pdecks[deckIndex]
+		self.hullform = hullform
+		self.z = z
 		self.deckIndex = deckIndex
+		self.make_deck()
 
+	
 	def regenerateMesh(self):
 		self.mesh = om.TriMesh()
 
-		pass
-
-
-class DBB (Geometry):
-	def __init__(self, hullform, deck):
-		super().__init__()
-		self.hullform= hullform
-		self.deck=deck
-		self.position = np.array([0.,0.,0.])
-
-	def regenerateMesh(self):
-		self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
+	def make_deck(self):
+		self.mesh = mf.make_deck_halfplane(self.hullform.LOA, self.z, self.hullform.centroid)
+		#self.mesh = mf.cut_meshes(self.mesh, self.hullform.mesh) 	#predugo traje
 
 	def move(self, move_vector):
 		self.position += move_vector
@@ -112,17 +157,53 @@ class DBB (Geometry):
 		old_position = self.position
 		self.position = new_position
 		self.mesh = mf.move_mesh(self.mesh, new_position - old_position)
+
 		
-	def testMesh(self, block_dims):
-		self.block_dims = block_dims
-		self.position = -block_dims / 2 #centrira block u 0,0,0
-		self.position[1] = 0	#centrira block s obzirom na xz ravninu 
+		
+		
+		
+		
+		
+		
+		
+		
+class DBB (Geometry):
+	def __init__(self, hullform, deck:DBBDeck,block_dims,position):
+		super().__init__()
+		self.hullform= hullform
+		self.deck=deck
+		self.position = np.array([position[0],position[1],deck.z])
+		self.block_dims=block_dims
+		self.genMesh()
+		self.cutMesh()
+
+	def regenerateMesh(self):
+		self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
+
+	def move(self, move_vector):
+		self.position += move_vector
+		#self.regenerateMesh()
+		self.mesh = mf.move_mesh(self.mesh, move_vector)
+		
+		#self.position[0] = self.position[0] + dx
+		#self.position[1] = self.position[0] + dy
+		#self.position[2] = self.position[0] + dz
+		#self.regenerateMesh()
+
+	def setPosition(self, new_position):
+
+		self.position = new_position
+		self.genMesh()
+
+		old_position = self.position
+		self.position = new_position
+		self.mesh = mf.move_mesh(self.mesh, new_position - old_position)
+		
+	def genMesh(self):
 		self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
 
 	def cutMesh(self):
-		form_mesh = self.hullform.mesh
-		block_mesh = self.mesh
-		self.mesh = mf.cut_meshes(block_mesh, form_mesh)
+		self.mesh = mf.cut_meshes(self.mesh, self.hullform.mesh)
 	
 	def calcVolume(self):
 		print(mf.calc_mesh_volume(self.mesh))

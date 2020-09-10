@@ -26,7 +26,10 @@ class DBBCommand(Command):
 		mb = app.mainFrame.menuBar()
 
 		self.menuMain = QMenu("DBB")
-
+		
+		self.menuImportFromCsv = self.menuMain.addAction("Import From Csv")
+		self.menuImportFromCsv.triggered.connect(self.onImportFromCsv)
+		
 		self.menuInitTestProblem = self.menuMain.addAction("TestProblem")
 		self.menuInitTestProblem.triggered.connect(self.onGenerateTestProblerm)
 
@@ -90,7 +93,7 @@ class DBBCommand(Command):
 	def onMoveDBB(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB,DBB) or isinstance(currDBB,DBBHullForm):
+			if isinstance(currDBB,DBB) or isinstance(currDBB,DBBHullForm) or isinstance(currDBB,DBBDeck):
 				MoveMenu = mm.Move_Dialog()
 				move_vector = MoveMenu.run()
 				if move_vector is not None:
@@ -103,7 +106,7 @@ class DBBCommand(Command):
 	def onSetPosition(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB,DBB) or isinstance(currDBB,DBBHullForm):
+			if isinstance(currDBB,DBB) or isinstance(currDBB,DBBHullForm) or isinstance(currDBB,DBBDeck):
 				SetPositionMenu = mm.SetPosition_Dialog()
 				new_position = SetPositionMenu.run()
 				if new_position is not None:
@@ -130,12 +133,36 @@ class DBBCommand(Command):
 			if isinstance(currDBB,DBB):
 				currDBB.IsClosed()
 	
-	
+	def onImportFromCsv(self):
+		ImportFromCsvMenu = mm.ImportFromCsvMenu_Dialog()
+		folder_path = ImportFromCsvMenu.run()	#dodaj jos uvijet da se u folderu nalaze prave datoteke
 
+		
+		dbbproblem = DBBProblem("")
+		dbbproblem.readProblem(folder_path)
+		#make form from huf
+		#with open(huf_path, "r") as csv: 
+		
+		#tu ih emmita u vizualizaciju
+		Signals.get().geometryImported.emit(dbbproblem.hull)
+		for deck in dbbproblem.decks:
+			Signals.get().geometryImported.emit(deck)
+		for dbb in dbbproblem.dbbs:
+			Signals.get().geometryImported.emit(dbb)
+		#self.menuInitTestProblem.setEnabled(False)
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
 class DBBImporter(IOHandler):
 	def __init__(self):
 		super().__init__()
-		Signals.get().importGeometry.connect(self.importGeometry)
 
 	def importGeometry(self, fileName):
 		if len(fileName) < 1:
