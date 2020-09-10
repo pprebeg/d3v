@@ -477,11 +477,14 @@ class ElementResult(Result):
         self.feres = {}
         pass
 
-    def getValue(self, fe: Element):
-        return self.feres[fe.id]
+    def getValue(self, feID):
+        return self.feres[feID]
 
-    def addValue(self, fe: Element,value):
-        self.feres[fe.id]=value
+    def setValue(self, feID, value):
+        self.feres[feID]=value
+
+    def keyExist(self,feID):
+        return feID in self.feres
 
 
 class FEMModelResults:
@@ -505,14 +508,18 @@ class LusaResults(FEMModelResults):
         pass
 
     def readOutput(self, path):
-        filename='LUSAhoggCSD.OUT'
         abspath1 = '\\'.join(path.split('\\')[0:-1])
         abspath2 = '/'.join(path.split('/')[0:-1])
         if len(abspath2) > len(abspath1):
-            abspath = abspath2 + '/' + filename
+            abspath=abspath2 + '/'
         else:
-            abspath = abspath1 + '\\' + filename
-        self.readCSDFile(abspath)
+            abspath=abspath1 + '\\'
+
+        abspath_hoggCSD = abspath + 'LUSAhoggCSD.OUT'
+        abspath_saggCSD=  abspath + 'LUSAsaggCSD.OUT'
+
+        self.readCSDFile(abspath_hoggCSD)
+        self.readCSDFile(abspath_saggCSD)
         pass
 
     def readCSDFile(self,path):
@@ -563,25 +570,25 @@ class LusaResults(FEMModelResults):
                     strakeNo    = int(sline[0])
                     elNo        = int(sline[1])
                     self.las.addPlate(elNo,strakeNo)
-                    collapse_stress.addValue(elNo,float(sline[2]))
-                    collapse_mod.addValue(elNo, float(sline[3]))
-                    collapse_cycle.addValue(elNo, float(sline[4]))
+                    collapse_stress.setValue(elNo, float(sline[2]))
+                    collapse_mod.setValue(elNo, float(sline[3]))
+                    collapse_cycle.setValue(elNo, float(sline[4]))
             elif isGPCdata:
                 if len(sline) > 5:
                     strakeNo    = int(sline[0])
                     elNo        = int(sline[1])
                     self.las.addSPC(elNo, strakeNo)
-                    collapse_stress.addValue(elNo, float(sline[2]))
-                    collapse_mod.addValue(elNo, float(sline[3]))
-                    collapse_cycle.addValue(elNo, float(sline[4]))
+                    collapse_stress.setValue(elNo, float(sline[2]))
+                    collapse_mod.setValue(elNo, float(sline[3]))
+                    collapse_cycle.setValue(elNo, float(sline[4]))
             elif isHCdata:
                 if len(sline) > 5:
                     endPtNo    = int(sline[0])
                     elNo        = int(sline[1])
                     self.las.addHC(elNo, endPtNo)
-                    collapse_stress.addValue(elNo, float(sline[2]))
-                    collapse_mod.addValue(elNo, float(sline[3]))
-                    collapse_cycle.addValue(elNo, float(sline[4]))
+                    collapse_stress.setValue(elNo, float(sline[2]))
+                    collapse_mod.setValue(elNo, float(sline[3]))
+                    collapse_cycle.setValue(elNo, float(sline[4]))
 
 
 
