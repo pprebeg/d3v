@@ -8,7 +8,7 @@ from signals import Signals
 from geometry import Geometry
 from hullform import HullForm
 import os
-from PySide2.QtCore import Slot,Qt
+from PySide2.QtCore import Slot,Qt,SIGNAL
 from PySide2.QtCore import QAbstractTableModel, QModelIndex, QRect
 from PySide2.QtGui import QColor, QPainter
 from PySide2.QtCharts import QtCharts
@@ -122,16 +122,25 @@ class CustomTableModel(QAbstractTableModel):
         self.input_data = []
         self.input_names = []
         self.mapping = {}
+        self.column_count = 0
+        self.row_count = 0
+
 
     def setInputData(self,input_names, input_data):
+        self.beginResetModel()
         self.input_data=input_data
         self.input_names= input_names
+        self.column_count = len(self.input_names)
+        self.row_count = len(self.input_data)
+        self.endResetModel()
+
+
 
     def rowCount(self, parent=QModelIndex()):
-        return len(self.input_data)
+        return self.row_count
 
     def columnCount(self, parent=QModelIndex()):
-        return len(self.input_names)
+        return self.column_count
 
     def headerData(self, section, orientation, role):
         if role != Qt.DisplayRole:
@@ -170,6 +179,7 @@ class CustomTableModel(QAbstractTableModel):
 
     def clear_mapping(self):
         self.mapping = {}
+
 
 class DialogHullFormHydrostaticCurves(QDialog):
     def __init__(self, parent):
@@ -243,15 +253,21 @@ class DialogHullFormHydrostaticCurves(QDialog):
         #self.currentHullForm.getResults(9, 1.025)
         #return
         input_data = []
+        maxWL= float(self.txtMaxWL.toPlainText())
+        stepWL = float(self.txtWLStep.toPlainText())
+        h=maxWL
+        while h > 0:
+            result = self.currentHullForm.getResults(h, 1.025)
+            input_data.append(result)
+            h=h-stepWL
+            if h <= 0:
+                result = self.currentHullForm.getResults(0.001, 1.025)
+                input_data.append(result)
 
-        for i in range (1,10,1):
-                h = (i/9)*9
-                result = self.currentHullForm.getResults(h, 1.025)
-                input_data.append([result[0],result[1],result[2]])
 
         input_names = ['h', 'Volume', 'Awl', 'Xwl', 'KBz', 'KBx', 'Ib', 'Il', 'Lwl', 'Bwl', 'MF area',
                        'MoB','KMo','MlB','KMl','JZ','Cwl','CB','CP','CX']
-        input_names = ['h', 'Volume', 'Awl']
+        #input_names = ['h', 'Volume', 'Awl']
 #        self.model.layoutAboutToBeChanged()
         self.model.setInputData(input_names, input_data)
         #self.model.layoutChanged()
@@ -268,7 +284,7 @@ class DialogHullFormHydrostaticCurves(QDialog):
             self.chart.addSeries(series)
             # get the color of the series and use it for showing the mapped area
             seriesColorHex = "{}".format(series.pen().color().name())
-            self.model.add_mapping(seriesColorHex, QRect(i, 0, 2, self.model.rowCount()))
+            self.model.add_mapping(seriesColorHex, QRect(i, 0, 1, self.model.rowCount()))
 
         self.chart.createDefaultAxes()
 
