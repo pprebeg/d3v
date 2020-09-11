@@ -46,16 +46,15 @@ class DBBProblem ():
 			abspath = abspath2 + '/'
 		else:
 			abspath = abspath1 + '\\'
-
-
+		
 		huf_path = abspath + data[0][1]
 		block_data_path = abspath + data[1][1]
 		#make hull from huf file:
 		self.hull= DBBHullForm(huf_path)
-		deckz_list= self.hull.pdecks
-		deckz_list = []
-		deckz_list.append(self.hull.pdecks[2])
-		deckz_list.append(self.hull.pdecks[3])
+		deckz_list= self.hull.pdecks[:-1] #bez keela
+		#deckz_list = []
+		#deckz_list.append(self.hull.pdecks[2])
+		#deckz_list.append(self.hull.pdecks[3])
 		#deckz_list.append(self.hull.pdecks[4])
 		for deckIndex in range(len(deckz_list)):
 			self.decks.append(DBBDeck(self.hull, deckz_list[deckIndex], deckIndex)) 
@@ -79,10 +78,15 @@ class DBBProblem ():
 					block_dims = np.array([x,y,z])
 					position_A = np.array([Ax,Ay])
 				
-					block = DBB(self.hull, self.decks[deck],block_dims,position_A)
+					block = DBB(self.hull, self.decks[deck], block_dims, position_A, abspath)
 					self.dbbs.append(block)
 				
-				
+		#print(self.hull.wlinesNeg)
+		#print(self.hull.wlinesPos[1])
+		#print(self.hull)
+		#print(len(self.decks))
+		#print(self.dbbs)
+		#print(self.filename)
 	def testProblem(self, scale, block_dims):
 		self.hull= DBBHullForm("", scale)
 		self.dbbs.append(DBB(self.hull,0))
@@ -133,14 +137,43 @@ class DBBDeck (Geometry):
 		self.hullform = hullform
 		self.z = z
 		self.deckIndex = deckIndex
-		self.make_deck()
+		self.genMesh()
 
 	
 	def regenerateMesh(self):
 		self.mesh = om.TriMesh()
 
-	def make_deck(self):
-		self.mesh = mf.make_deck_halfplane(self.hullform.LOA, self.z, self.hullform.centroid)
+	def genMesh(self):	#za keel koji je na 0 nema wl
+		for wline in self.hullform.wlinesPos:
+			if np.isclose(self.z, wline[0][2]):
+				deck_points = np.unique(np.asarray(wline), axis = 0)
+				break
+
+		for i in range(deck_points.shape[0]):
+			bad_i = []
+			point = deck_points[i]
+			next_point = deck_points[(i+1) % deck_points.shape[0]]
+			if np.allclose(point, next_point):
+				bad_i.append(i)
+		deck_points = np.delete(deck_points, bad_i, 0)
+
+		
+		new_points = []
+		for point in deck_points:
+			if point[1] != 0: #ako point nije na osi x 
+				new_point = copy.copy(point)
+				new_point[1] = 0
+				new_points.append(new_point)
+		
+		deck_points = np.append(deck_points, np.asarray(new_points), axis = 0)
+		#deck_points = np.asarray(deck_points + new_points)
+		deck_points = np.unique(deck_points, axis = 0)		#duplikat na tocki x=50? nakon uniqua, arrejevi su close; ne equal pa ih unique ne reze?
+		self.mesh = mf.flip_mesh_face_orientation(mf.make_deck(deck_points))
+		
+		#print(deck_points)
+		
+		#print(deck_points[18],deck_points[19],deck_points[20],)
+		#print(np.allclose(deck_points[18],deck_points[19]))
 		#self.mesh = mf.cut_meshes(self.mesh, self.hullform.mesh) 	#predugo traje
 
 	def move(self, move_vector):
@@ -168,15 +201,17 @@ class DBBDeck (Geometry):
 		
 		
 class DBB (Geometry):
-	def __init__(self, hullform, deck:DBBDeck,block_dims,position):
+	def __init__(self, hullform, deck:DBBDeck,block_dims, position, abspath):
 		super().__init__()
+		self.folderpath = abspath
 		self.hullform= hullform
 		self.deck=deck
 		self.position = np.array([position[0],position[1],deck.z])
 		self.block_dims=block_dims
 		self.genMesh()
 		self.cutMesh()
-
+		#print(self.hullform.filename)
+		
 	def regenerateMesh(self):
 		self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
 
@@ -200,11 +235,12 @@ class DBB (Geometry):
 		self.mesh = mf.move_mesh(self.mesh, new_position - old_position)
 		
 	def genMesh(self):
-		self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
+		self.mesh = mf.make_block_from_unit_csv(self.block_dims, self.position, self.folderpath)
+		#self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
 
 	def cutMesh(self):
-		self.mesh = mf.cut_meshes(self.mesh, self.hullform.mesh)
-	
+		pass
+		
 	def calcVolume(self):
 		print(mf.calc_mesh_volume(self.mesh))
 		

@@ -207,6 +207,6 @@ class MaestroXML:
             # print(item.attrib)
         lusaresult = LusaResults('Lusa Results',fem.mas)
         lusaresult.readOutput(self.xmlpath)
-        fem.lusaresult=lusaresult
+        fem.element_results=lusaresult
 
 pass

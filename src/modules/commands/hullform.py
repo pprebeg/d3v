@@ -13,7 +13,7 @@ import time
 class HullFormMeshQuality:
     def __init__(self):
         self._numWL = 20
-        self._numPnWLhalf = 10
+        self._numPnWLhalf = 20
         self._distPolyOrder=3
 
     @property

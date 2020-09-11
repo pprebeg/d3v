@@ -3,6 +3,7 @@ import numpy as np
 import copy
 import rotm as rm
 import sys
+import csv
 
 from mpl_toolkits import mplot3d
 import matplotlib.pyplot as plt
@@ -323,8 +324,9 @@ def calc_triangle_circumradius(triangle_points):
 	b = np.sum(b**2)**0.5
 	c = triangle_points[1] - triangle_points[2]
 	c = np.sum(c**2)**0.5
-	
 	R = a*b*c/(((a+b+c)*(-a+b+c)*(a-b+c)*(a+b-c))**0.5)
+	#if np.isinf(R): #kada su 2 tocke na istom mjestu
+	#	print(triangle_points)
 	return R
 	
 def calc_triangle_circumcenter(triangle_points):
@@ -334,11 +336,20 @@ def calc_triangle_circumcenter(triangle_points):
 	ca = c-a
 	ba = b-a
 	baXca = np.cross(ba, ca)
-	
+	if np.allclose(baXca, 0): #sve tocke su kolinearne
+		if np.isclose(np.sign(np.dot(ca,ba)), 1):	#ako su vektori istog smijera
+			vectors = np.array([ca,ba])
+			max_vect = vectors[np.where(vectors == np.max(np.sum(vectors**2, 1)**0.5))[0]]
+			return a + max_vect/2
+		else:	
+			return b +(ca - ba)/2
+			
+
 	v1 = np.sum(ca**2) * np.cross(baXca, ba)
 	v2 = np.sum(ba**2) * np.cross(-baXca, ca)
 	v3 = 2 * np.sum(baXca**2)
-	
+
+		
 	m = a + (v1+v2)/v3
 	return m
 
@@ -445,20 +456,9 @@ def make_form(scale = 5, move_vector = np.array([0.,0.,0.])):
 	
 	return mesh
 	
-def make_deck_halfplane(a, z, move_vector = np.array([0.,0.,0.])):
-	mesh = om.TriMesh()
-	vh = []
-	fh = []
-	#points = np.array([[-a,0,z], [a,0,z], [a,a,z], [-a,a,z]], dtype = "float64") + move_vector
-	points = np.array([[-a / 2, 0, z], [a / 2, 0, z], [a / 2, a / 8, z], [-a / 2, a / 8, z]],
-					  dtype="float64") + move_vector
-	for point in points: 
-		vh.append(mesh.add_vertex(point))
-	
-	mesh.add_face(vh[0], vh[1], vh[2])
-	mesh.add_face(vh[2], vh[3], vh[0])
-	
-	return mesh
+def make_deck(points):
+	report = open("report.txt", "w")
+	return BowyerWatson_triangulation_algorithm_backup(points, report)
 
 #def is_outside_mesh(point, mesh):
 #	outside_check_array = np.empty((0))
@@ -1451,11 +1451,40 @@ def cut_meshes(block_mesh, form_mesh):
 		return mesh
 		#return mesh
 	
-
-
-
+def make_subdiv_block_csv():
+	block_dims = np.array([1,1,1])
+	mesh = make_block(block_dims)
+	mesh = subdivide_mesh([mesh], n = 3)
+	points = mesh.points().tolist()
+	fvi = mesh.face_vertex_indices().tolist()
+	
+	with open("unit_block_points.csv", "w", newline = "") as csv_file:
+		csv_writer = csv.writer(csv_file)
+		for point in points:
+			csv_writer.writerow([point[0],point[1],point[2]])
+	
+	with open("unit_block_fvi.csv", "w", newline = "") as csv_file:
+		csv_writer = csv.writer(csv_file)
+		for f in fvi:
+			csv_writer.writerow([f[0],f[1],f[2]])
+	
+def	make_block_from_unit_csv(block_dims = np.array([1,1,1]), move_vector = np.array([0,0,0]), path = ""):
+	with open(path + "unit_block_points.csv", "r", newline ="") as csv_file:
+		csv_reader = csv.reader(csv_file)
+		points = np.asarray([line for line in csv_reader]).astype(float)
+		
+	with open(path + "unit_block_fvi.csv", "r", newline ="") as csv_file:
+		csv_reader = csv.reader(csv_file)
+		fvi = np.asarray([line for line in csv_reader]).astype(int)
+	
+	return om.TriMesh(points*block_dims + move_vector, fvi)
 	
 	
+	
+#make_block_from_unit_csv("C:\\Users\\Tomislav\\Desktop\\Py_Prog")
+	
+		
+#make_subdiv_block_csv()
 #tests:
 #mesh = om.TriMesh()
 #mesh = make_block()

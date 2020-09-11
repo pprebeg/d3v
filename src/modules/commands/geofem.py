@@ -118,6 +118,11 @@ class Element(GeoEntity):
         self.vertex_based_values=[]
         self.value_name=""
         pass
+
+    def setFaceValueUsingElementID(self,result:dict):
+        val= result.get(self.id)
+        return val
+
     def addNode(self,node):
         self.nodes.append(node)
         self.vertex_based_values.append(0)
@@ -125,6 +130,10 @@ class Element(GeoEntity):
         super().init(id)
     def updateMesh(self,mesh:om.TriMesh,mc:MeshControl):
         pass
+
+    def onTPLValue(self):
+        self.face_value = 0
+        return self.face_value
 
 
 class RodElement(Element):
@@ -137,6 +146,10 @@ class BeamElement(Element):
     def __init__(self):
         super().__init__()
         self.wo = np.array([0, 0, 0]) #web orientation
+
+    def onTPLValue(self):
+        self.face_value = self.property.tw
+        return self.face_value
 
     def updateMesh(self,mesh:om.TriMesh,mc:MeshControl):
         print("čvor 1")
@@ -251,6 +264,11 @@ class TriaElement(Element):
     def __init__(self):
         super().__init__()
         pass
+
+    def onTPLValue(self):
+        self.face_value = self.property.tp
+        return self.face_value
+
 class StiffTriaElement(TriaElement):
     def __init__(self):
         super().__init__()
@@ -266,6 +284,10 @@ class QuadElement(Element):
         pass
     def init(self,id):
         self.id=id
+
+    def onTPLValue(self):
+        self.face_value = self.property.tp
+        return self.face_value
 
 
 class StiffQuadElement(QuadElement):
@@ -324,10 +346,13 @@ class MaestroElementAssociation():
 
     def addStrakePlate(self,key:int,elList:[]):
         self.strakePlate2fe[key]=elList
+
     def addStrakeGirder(self,key:int,elList:[]):
         self.strakeGirder2fe[key]=elList
+
     def addStrakeFrame(self,key:int,elList:[]):
         self.strakeFrame2fe[key]=elList
+
     def addEndPointNode(self,key:int,nodeFeTag:int):
         feTagList = self.endPoint2node.setdefault(key,[])
         feTagList.append(nodeFeTag)
@@ -335,6 +360,22 @@ class MaestroElementAssociation():
     def addEndPointStrake(self, key:int, strakeID:int):
         strakeList = self.endPointStrakes.setdefault(key,[])
         strakeList.append(strakeID)
+
+    def getPlateElsForEnpoint(self, endpointID):
+        connectedElements=[]
+        strakeList = self.endPointStrakes.get(endpointID)
+        if strakeList is not None:
+            for idStrake in strakeList:
+                for idEl in self.strakePlate2fe[idStrake]:
+                    connectedElements.append(idEl)
+        return connectedElements
+
+    def getPlateElemForStrake(self,strakeID):
+        return self.strakePlate2fe.get(strakeID)
+
+    def getGirderBeamElemForStrake(self,strakeID):
+        return self.strakeGirder2fe.get(strakeID)
+
 
 class LusaElementAssociation():
     def __init__(self):
@@ -362,11 +403,97 @@ class GeoFEM(Geometry):
         self.units= Units()
         self.mc = MeshControl()
         self.mas = MaestroElementAssociation()
-        self.lusaresult= 0
-
-
-
+        self.element_results= {}
+        self.element_vertex_results = {}
+        self.vertex_results = {}
+        self.model_results = {}
+        self.result_name=""
+        self.is_node_result=False
+        self.is_element_result = False
+        self.attrib_val_functions ={}
+        self.populateAtribValFunctionsDictionary()
+        self.minValue=0
+        self.maxValue=0
         pass
+
+    def prepareModelForVisualization(self,key):
+        self.minValue = float("inf")
+        self.maxValue = float("-inf")
+        fatrib= self.attrib_val_functions.get(key)
+
+        if fatrib == None:
+            self.doResultValue(key)
+        else:
+            fatrib()
+
+
+    # region Attribute Value Functions
+
+    def populateAtribValFunctionsDictionary(self):
+        self.addAttValFunc('TPL', self.doTPLValue)
+        self.addAttValFunc('Material ID', self.doMaterialIDValue)
+        self.addAttValFunc('Property ID', self.doPropertyIDValue)
+
+    def addAttValFunc(self, key, f):
+        self.attrib_val_functions[key] = f
+
+    def doTPLValue(self,key):
+        for el in self.elements:
+            val= el.onTPLValue(self)
+            self.checkMinMax(val)
+
+
+    def doMaterialIDValue(self,key):
+        pass
+
+    def doPropertyIDValue(self, key):
+        pass
+
+
+    def doResultValue(self,key):
+        self.setValueToItemResults(key)
+
+    # endregion
+
+
+    def checkMinMax(self,val):
+        if val > self.maxValue:
+            self.maxValue = val
+        if val < self.minValue:
+            self.minValue = val
+
+    def isElementFaceResult(self):
+        return self.is_element_result and (not self.is_node_result)
+
+    def isElementNodeResult(self):
+        return self.is_element_result and self.is_node_result
+
+    def isNodeResult(self):
+        return (not self.is_element_result) and self.is_node_result
+
+    def setValueToItemResults(self, resultName):
+        result = self.element_results.get(resultName)
+        if result != None:
+            self.is_element_result= True
+            self.is_node_result = False
+            for el in self.elements:
+                val = el.setFaceValueUsingElementID(result)
+                self.checkMinMax(val)
+            return
+
+        result = self.element_vertex_results.get(resultName)
+        if result != None:
+            self.is_element_result= True
+            self.is_node_result = True
+            return
+
+        result = self.vertex_results.get(resultName)
+        if result != None:
+            self.is_element_result = False
+            self.is_node_result = True
+            return
+
+
     def addNode(self,item):
         self.nodes[item.id]=item
     def getNode(self,id):
@@ -392,6 +519,8 @@ class GeoFEM(Geometry):
             el.updateMesh(mesh,self.mc)
         pass
         self.mesh = mesh
+    def setResultValuesOnElements(self):
+        pass
 
 
 
@@ -564,35 +693,57 @@ class LusaResults(FEMModelResults):
             sline = line.split(" ")
             if  len(sline)== 0:
                 continue
-
+            el_no_lusa=-1
             if isSPCdata:
                 if len(sline) > 5:
                     strakeNo    = int(sline[0])
-                    elNo        = int(sline[1])
-                    self.las.addPlate(elNo,strakeNo)
-                    collapse_stress.setValue(elNo, float(sline[2]))
-                    collapse_mod.setValue(elNo, float(sline[3]))
-                    collapse_cycle.setValue(elNo, float(sline[4]))
+                    el_no_lusa        = int(sline[1])
+                    self.las.addPlate(el_no_lusa, strakeNo)
+
+                    elIDs=self.mas.getPlateElemForStrake(strakeNo)
+                    cc_new = int(sline[4])
+                    for id_el in elIDs:
+                        bAddNew=True
+                        cc_old= collapse_cycle.getValue(id_el)
+                        if cc_old != None and cc_old < cc_new:
+                            pass
+                        else:
+                            collapse_stress.setValue(id_el, float(sline[2]))
+                            collapse_mod.setValue(id_el, float(sline[3]))
+                            collapse_cycle.setValue(id_el, cc_new)
             elif isGPCdata:
                 if len(sline) > 5:
                     strakeNo    = int(sline[0])
-                    elNo        = int(sline[1])
-                    self.las.addSPC(elNo, strakeNo)
-                    collapse_stress.setValue(elNo, float(sline[2]))
-                    collapse_mod.setValue(elNo, float(sline[3]))
-                    collapse_cycle.setValue(elNo, float(sline[4]))
+                    el_no_lusa        = int(sline[1])
+                    self.las.addSPC(el_no_lusa, strakeNo)
+
+                    elIDs = self.mas.getGirderBeamElemForStrake(strakeNo)
+                    cc_new = int(sline[4])
+                    for id_el in elIDs:
+                        bAddNew = True
+                        cc_old = collapse_cycle.getValue(id_el)
+                        if cc_old != None and cc_old < cc_new:
+                            pass
+                        else:
+                            collapse_stress.setValue(id_el, float(sline[2]))
+                            collapse_mod.setValue(id_el, float(sline[3]))
+                            collapse_cycle.setValue(id_el, cc_new)
             elif isHCdata:
                 if len(sline) > 5:
                     endPtNo    = int(sline[0])
-                    elNo        = int(sline[1])
-                    self.las.addHC(elNo, endPtNo)
-                    collapse_stress.setValue(elNo, float(sline[2]))
-                    collapse_mod.setValue(elNo, float(sline[3]))
-                    collapse_cycle.setValue(elNo, float(sline[4]))
-
-
-
-
+                    el_no_lusa        = int(sline[1])
+                    self.las.addHC(el_no_lusa, endPtNo)
+                    elIDs = self.mas.getPlateElsForEnpoint(endPtNo)
+                    cc_new = int(sline[4])
+                    for id_el in elIDs:
+                        bAddNew = True
+                        cc_old = collapse_cycle.getValue(id_el)
+                        if cc_old != None and cc_old < cc_new:
+                            pass
+                        else:
+                            collapse_stress.setValue(id_el, float(sline[2]))
+                            collapse_mod.setValue(id_el, float(sline[3]))
+                            collapse_cycle.setValue(id_el, cc_new)
 
         f.close()
         pass
