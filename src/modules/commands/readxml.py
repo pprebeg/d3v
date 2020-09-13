@@ -207,6 +207,9 @@ class MaestroXML:
             # print(item.attrib)
         lusaresult = LusaResults('Lusa Results',fem.mas)
         lusaresult.readOutput(self.xmlpath)
-        fem.element_results=lusaresult
+        for key, value in lusaresult.lers.items():
+            fem.element_results.setdefault(key,value)
+        for key, value in lusaresult.modres.items():
+            fem.model_results.setdefault(key,value)
 
 pass

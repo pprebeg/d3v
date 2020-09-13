@@ -250,7 +250,7 @@ class DialogHullFormHydrostaticCurves(QDialog):
         return button
 
     def refreshResults(self):
-        #self.currentHullForm.getResults(9, 1.025)
+        #self.currentHUS.getResults(9, 1.025)
         #return
         input_data = []
         maxWL= float(self.txtMaxWL.toPlainText())

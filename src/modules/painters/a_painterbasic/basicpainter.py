@@ -73,7 +73,7 @@ class BasicPainter(Painter):
         #     QMessageBox.critical(None, "Failed to Initialize OpenGL",
         #                          "Could not initialize OpenGL. This program requires OpenGL x.x or higher. Please check your video card drivers.")
         self.glf.initializeOpenGLFunctions()
-        self.glf.glClearColor(0.0, 0.0, 0.0, 1)
+        self.glf.glClearColor(1.0, 1.0, 1.0, 1)
         self.program.addShaderFromSourceCode(QOpenGLShader.Vertex, self.vertexShader)
         self.program.addShaderFromSourceCode(QOpenGLShader.Fragment, self.fragmentShader)
         self.program.link()

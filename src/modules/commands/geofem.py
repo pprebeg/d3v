@@ -569,13 +569,11 @@ class GeneralResultsDictionary(Result):
     def __init__(self, name):
         super().__init__(name)
         self.results = {}
-        self.valueNames = []
-        self.keyName = ""
         pass
 
-    def initilizeResultDictionary(self, keyName, valueNames):
-        self.keyName = keyName
-        self.valueNames = [valueNames]
+    def appendValue(self, key, value):
+        resultList = self.results.setdefault(key, [])
+        resultList.append(value)
 
     def addValues(self, key, values: []):
         self.results[key] = values
@@ -599,6 +597,24 @@ class GeneralResultsDictionary(Result):
             x.append(key)
             y.append(res[iresy])
 
+class GeneralResultsTableModel(Result):
+    def __init__(self, name):
+        super().__init__(name)
+        self.data =[]
+        self.column_names =[]
+        pass
+
+    def appendName(self, name: str):
+        self.column_names.append(name)
+
+    def addRow(self, values: list):
+        self.data.append(values)
+
+    def getRowValues(self, row_index):
+        return self.data[row_index]
+
+    def getValue(self, row_index, column_index: int):
+        return self.data[row_index][column_index]
 
 class ElementResult(Result):
     def __init__(self, name):
@@ -607,7 +623,7 @@ class ElementResult(Result):
         pass
 
     def getValue(self, feID):
-        return self.feres[feID]
+        return self.feres.get(feID)
 
     def setValue(self, feID, value):
         self.feres[feID]=value
@@ -634,6 +650,7 @@ class LusaResults(FEMModelResults):
         self.las = LusaElementAssociation()
         self.mas=mas
         self.lers = {} #Lusa element results
+        self.modres={}
         pass
 
     def readOutput(self, path):
@@ -647,11 +664,68 @@ class LusaResults(FEMModelResults):
         abspath_hoggCSD = abspath + 'LUSAhoggCSD.OUT'
         abspath_saggCSD=  abspath + 'LUSAsaggCSD.OUT'
 
-        self.readCSDFile(abspath_hoggCSD)
-        self.readCSDFile(abspath_saggCSD)
+        self.readCSDFile(abspath_hoggCSD,False)
+        self.readCSDFile(abspath_saggCSD,True)
+
+        abspath_hogg = abspath + 'LUSAhogg.OUT'
+        abspath_sagg = abspath + 'LUSAsagg.OUT'
+
+        iterationResults = GeneralResultsTableModel('Lusa iteration results')
+        self.modres[iterationResults.name]=iterationResults
+        iterationResults.appendName('CycleNo')
+        iterationResults.appendName('Moment, kNm')
+        iterationResults.appendName('Curvature, 1/m')
+        iterationResults.appendName('y_NA, m')
+
+        self.readMainLusaFile(abspath_sagg,True,iterationResults)
+        self.readMainLusaFile(abspath_hogg, False, iterationResults)
+
         pass
 
-    def readCSDFile(self,path):
+    def readMainLusaFile(self, path, isSagg, tableResult:GeneralResultsTableModel):
+        file = pathlib.Path(path)
+        if not file.exists():
+            return
+        f = open(path, "r")
+        nlines2skip = 0
+        isCycleData = False
+
+        for line in f:
+            if nlines2skip > 0:
+                nlines2skip = nlines2skip - 1
+                continue
+            line = ' '.join(line.split())
+            if line.startswith('*'):
+                continue
+            if line == "" or line == " ":
+                continue
+
+            if 'HULL MODULE RESPONSE DATA' in line:
+                nlines2skip = 4
+                isCycleData = True
+                continue
+            if 'ULTIMATE CAPACITY IS' in line:
+                f.close()
+                if isSagg:
+                    tableResult.data.reverse()
+                return
+            sline = line.split(" ")
+            if len(sline) == 0:
+                continue
+            if isCycleData:
+                if len(sline) == 4:
+                    rowValues=[0]*4
+                    rowValues[0]= int(sline[0])
+                    rowValues[1] = float(sline[1])
+                    rowValues[2] = float(sline[2])
+                    rowValues[3] = float(sline[3])
+                    tableResult.addRow(rowValues)
+
+        f.close()
+        if isSagg:
+            tableResult.data.reverse()
+
+    def readCSDFile(self,path,isSagg):
         file=pathlib.Path(path)
         if not file.exists():
             return
@@ -660,11 +734,17 @@ class LusaResults(FEMModelResults):
         isSPCdata=False
         isGPCdata = False
         isHCdata = False
-        collapse_stress = ElementResult('Collapse Stress')
+        if isSagg:
+            collapse_stress = ElementResult('Collapse Stress Sagg')
+            collapse_mod = ElementResult('Collapse Mod Sagg')
+            collapse_cycle = ElementResult('Collapse Cycle Sagg')
+        else:
+            collapse_stress = ElementResult('Collapse Stress Hogg')
+            collapse_mod = ElementResult('Collapse Mod Hogg')
+            collapse_cycle = ElementResult('Collapse Cycle Hogg')
+
         self.lers[collapse_stress.name]=collapse_stress
-        collapse_mod = ElementResult('Collapse Mod')
         self.lers[collapse_mod.name] = collapse_mod
-        collapse_cycle = ElementResult('Collapse Cycle')
         self.lers[collapse_cycle.name] = collapse_cycle
         for line in f:
             if  nlines2skip > 0:
@@ -718,6 +798,12 @@ class LusaResults(FEMModelResults):
                     self.las.addSPC(el_no_lusa, strakeNo)
 
                     elIDs = self.mas.getGirderBeamElemForStrake(strakeNo)
+                    elIDsPlate = self.mas.getPlateElemForStrake(strakeNo)
+                    if elIDs == None:
+                        elIDs = elIDsPlate
+                    elif elIDsPlate != None:
+                        for el in elIDsPlate:
+                            elIDs.append(el)
                     cc_new = int(sline[4])
                     for id_el in elIDs:
                         bAddNew = True
