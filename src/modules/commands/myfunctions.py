@@ -178,13 +178,17 @@ def hard_merge_meshes(meshes):   #meshes je lista sa meshevima
 			
 	bad_fh_list = []
 	new_fvi_list = []
-	for fh in merged_mesh.faces():		#trazimo bad fh i mijenjamo njihov fvi u novi
-		fvi = merged_mesh.face_vertex_indices()[fh.idx()]		#fvi je array sa shape(3)
+	
+	
+	merged_mesh_fvi = merged_mesh.face_vertex_indices().tolist()
+	merged_mesh_points = merged_mesh.points()
+	for i in range(len(merged_mesh_fvi)):	#trazimo bad fh i mijenjamo njihov fvi u novi
+		fvi = np.asarray(merged_mesh_fvi[i])		#fvi je array sa shape(3)
 		#print("for fvi: "+ str(fvi) + "\n")
-		face_points = merged_mesh.points()[fvi]
+		face_points = merged_mesh_points[fvi]
 		new_fvi = copy.copy(fvi)
 		for nvh in new_vh:		#trazi jeli novi vh i face imaju istu tocku
-			new_point = merged_mesh.points()[nvh.idx()] 
+			new_point = merged_mesh_points[nvh.idx()] 
 			
 			new_fvi[array_where_equal(face_points, new_point)] = nvh.idx()
 			#print(new_fvi)
@@ -194,6 +198,7 @@ def hard_merge_meshes(meshes):   #meshes je lista sa meshevima
 			#		print(new_fvi)
 		if np.array_equal(fvi, new_fvi) == False:		#ako originalni i novi fvi nisu isti dodaje novi fvi u listu
 			#print("ping")
+			fh = merged_mesh.face_handle(i)
 			bad_fh_list.append(fh)
 			new_fvi_list.append(new_fvi)
 			
@@ -224,20 +229,25 @@ def hard_merge_meshes(meshes):   #meshes je lista sa meshevima
 		merged_mesh.add_face(new_face_vhandles)
 			
 	delete_isolated_vertices(merged_mesh)
-	merged_mesh.garbage_collection()			
 			
 	return merged_mesh	
-							
-def delete_isolated_vertices(mesh):
-	for vh in mesh.vertices():	#delete isolated verices
-		i = 0
-		for fh in mesh.vf(vh):
-			i+=1
-		else:
-			if i == 0: #nema neighbouring faceva
-				mesh.delete_vertex(vh)
-
-							
+							 
+def delete_isolated_vertices(mesh): #prije je garbage_collection_bio vani!!!!!!!!!!!
+	mesh_points = mesh.points().tolist()
+	mesh_vertex_face_indices = mesh.vertex_face_indices().tolist() #kod vertex_face_indices izolirani su oni kojima je svima -1 (arrajevi moraju biti svi istevelicine pa je null -1)
+	#print(mesh_vertex_face_indices)
+	#print(mesh.face_vertex_indices())
+	for vh_idx in range(len(mesh_points)):
+		
+		neighbouring_faces_fh_idx = np.asarray(mesh_vertex_face_indices[vh_idx])
+		#print(neighbouring_faces_fh_idx)
+		if np.all(neighbouring_faces_fh_idx == -1):
+			#print(vh_idx)
+			vh = mesh.vertex_handle(vh_idx)
+			#print(vh)
+			#print(vh.idx())
+			mesh.delete_vertex(vh)
+	mesh.garbage_collection()
 	#print("points_with_duplicates:  " + str(points_with_duplicates) + "\n\n")
 		
 	#trebam povezati point sa verteksima koje treba zamijeniti
@@ -456,10 +466,39 @@ def make_form(scale = 5, move_vector = np.array([0.,0.,0.])):
 	
 	return mesh
 	
-def make_deck(points):
-	report = open("report.txt", "w")
-	return BowyerWatson_triangulation_algorithm_backup(points, report)
-
+#def make_deck(points):
+#	report = open("report.txt", "w")
+#	return BowyerWatson_triangulation_algorithm_backup(points, report)
+def make_deck(wline_points, subdivide = False):
+	#clean duplicates
+	wline_points = np.unique(wline_points, axis = 0) 
+	central_points = np.empty((0,3))
+	for point in wline_points:
+		if np.isclose(point[1], 0) ==  False:
+			central_point = copy.copy(point)
+			central_point[1] = 0
+			central_points = np.append(central_points, np.expand_dims(central_point, 0), axis = 0)
+	
+	deck_points = np.append(wline_points, central_points, axis = 0)
+	
+	
+	w_max_index = wline_points.shape[0]
+	c_max_index = central_points.shape[0]
+	
+	#pocetni i zadnji fvi koji nemogu u petlju
+	deck_fvi = np.array([[0,0+w_max_index,1],[deck_points.shape[0]-1,w_max_index-1,w_max_index-2]])
+	 
+	
+	for interval_index in range(len(central_points-1)):
+		#fvi = np.array([[w_max_index+interval_index,w_max_index+interval_index+1,1+interval_index],[w_max_index+interval_index+1,interval_index + 2, interval_index + 1]])
+		fvi = np.array([[w_max_index,w_max_index+1,1],[w_max_index+1,2,1]]) + interval_index
+		deck_fvi = np.append(deck_fvi, fvi, axis = 0)
+	
+	if subdivide == False:
+		return om.TriMesh(deck_points, deck_fvi)
+	elif subdivide == True:
+		return subdivide_mesh([om.TriMesh(deck_points, deck_fvi)])
+	#return om.TriMesh(deck_points, deck_fvi)
 #def is_outside_mesh(point, mesh):
 #	outside_check_array = np.empty((0))
 #	for fh in mesh.faces():
@@ -633,14 +672,14 @@ def make_supertriangle(points, report):			#problem u best fitting plane normali;
 def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci nes; ako su tocke kao u primjeru badT su svi facevi i brise ih ali ne ostavlja edgeve sa prosim pointom iteracije (svi facevi su u bad Tri)
 	#da probam max r po max r od pointa do pointa?
 	points = sort_by_dist(points, True)
-	report.write("input points: \n" + str(points) + "\n\n")
+	#report.write("input points: \n" + str(points) + "\n\n")
 	mesh = make_supertriangle(points, report)
 	start_points = copy.copy(mesh.points())
-	fig=plt.figure()
-	axes = plt.axes(projection='3d')
-	axes.set_xlabel("x")
-	axes.set_ylabel("y")
-	axes.set_zlabel("z")
+	#fig=plt.figure()
+	#axes = plt.axes(projection='3d')
+	#axes.set_xlabel("x")
+	#axes.set_ylabel("y")
+	#axes.set_zlabel("z")
 	
 	#ako ima samo 3 pointa u pointovima:  generiraj face
 	#if points.shape[0] == 3:
@@ -653,39 +692,42 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 	
 	for point in points:
 		#print(point) 
-		report.write("iteration for point:  \n" + str(point) + "\n\n")
+		#report.write("iteration for point:  \n" + str(point) + "\n\n")
 		vh = mesh.add_vertex(point)		
 		bad_fvi = np.empty((0,3))
 		bad_fh = []
-		for fh in mesh.faces():
-			fvi = mesh.face_vertex_indices()[fh.idx()]
-			triangle_points = mesh.points()[fvi]
+		mesh_points = mesh.points()
+		face_vertex_indices = mesh.face_vertex_indices().tolist()
+		for i in range(len(face_vertex_indices)):
+			fvi = np.asarray(face_vertex_indices[i], dtype = "int64")
+			triangle_points = mesh_points[fvi]
 			c = calc_triangle_circumcenter(triangle_points)
 			R = calc_triangle_circumradius(triangle_points)
 			if is_inside_sphere(point, c, R) == True:
-				bad_fvi = np.append(bad_fvi, fvi.reshape(1,3), axis = 0)
+				fh = mesh.face_handle(i)
+				bad_fvi = np.append(bad_fvi, np.expand_dims(fvi, 0), axis = 0)
 				bad_fh.append(fh)
 				
-		report.write("bad fvi: \n" + str(bad_fvi) + "\n\n")
+		#report.write("bad fvi: \n" + str(bad_fvi) + "\n\n")
 	
 		
 		badTriangles = om.TriMesh(mesh.points(), bad_fvi)		#inhereta pointove iz mesha!
 		polygon = []		#evi
 		
-		for fh in badTriangles.faces():					#find the boundary of the polygonal hole
-			for eh in badTriangles.fe(fh):
-				#print(badTriangles.edge_vertex_indices()[eh.idx()])
-				#print(badTriangles.is_boundary(eh))
-				if badTriangles.is_boundary(eh) == True:
-					evi = badTriangles.edge_vertex_indices()[eh.idx()]#neznam dali je u meshu i badtrianglesu eh isti za svaki edge najvj ne jer je generiran iz tocaka na pocetku, ali ako je generiran iz istih tocaka mozda su vertici isti(por. tocaka)
-					#print(evi)
-					polygon.append(evi) 
+		#for i in range(len(badTriangles.edge)):
+		bad_tri_evi = badTriangles.edge_vertex_indices().tolist()
+		for i in range(len(bad_tri_evi)):
+			eh = badTriangles.edge_handle(i)
+			if badTriangles.is_boundary(eh) == True:
+				evi = bad_tri_evi[i]#neznam dali je u meshu i badtrianglesu eh isti za svaki edge najvj ne jer je generiran iz tocaka na pocetku, ali ako je generiran iz istih tocaka mozda su vertici isti(por. tocaka)
+				#print(evi)
+				polygon.append(evi) 
 					
 		
 		
-		report.write("polygon: \n" + str(polygon) + "\n\n")
-		report.write("mesh points: \n" + str(mesh.points()) + "\n\n")
-		report.write("mesh face vertex indices: \n" + str(mesh.face_vertex_indices()) + "\n\n")
+		#report.write("polygon: \n" + str(polygon) + "\n\n")
+		#report.write("mesh points: \n" + str(mesh.points()) + "\n\n")
+		#report.write("mesh face vertex indices: \n" + str(mesh.face_vertex_indices()) + "\n\n")
 		
 		
 		for fh in bad_fh:
@@ -705,7 +747,7 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 		#	mesh.delete_face(fh, False)			#false da ne deleta izolirane vertexe
 		#mesh.garbage_collection()
 		
-		report.write("mesh face vertex indices after deleting bad triangles: \n" + str(mesh.face_vertex_indices()) + "\n\n")
+		#report.write("mesh face vertex indices after deleting bad triangles: \n" + str(mesh.face_vertex_indices()) + "\n\n")
 		#retriangualte
 		#for vh in mesh.vertices():
 			#print("aaaaa"+str(mesh.points()[vh.idx()])+"aaaaaa")
@@ -717,26 +759,27 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 			mesh.add_face(vh0, vh1, vh2) #tako da zadrzi orijentaciju
 			n_faces_after = len(mesh.faces())
 			
-			report.write("edge points to be merged with point \n" + str(mesh.points()[evi]) + "\n\n")
+			#report.write("edge points to be merged with point \n" + str(mesh.points()[evi]) + "\n\n")
 			
 			
 			
 			if n_faces_after == n_faces_before:			#ako je broj faceva isti face se nije dodao pa mijenjamo orijentaciuju		
-				report.write("same N of faces; executing first reverse orientation: \n" + str(n_faces_after) + "\n\n")
+				#report.write("same N of faces; executing first reverse orientation: \n" + str(n_faces_after) + "\n\n")
 				mesh.add_face(vh2, vh1, vh0)		#reverse orientation
 				n_faces_after = len(mesh.faces())
-				report.write("N faces after first reverse orientation: \n" + str(n_faces_after) + "\n\n")
+				#report.write("N faces after first reverse orientation: \n" + str(n_faces_after) + "\n\n")
 			else:
-				report.write("different N of faces: \n" + str(n_faces_after) + "\n\n")
+				pass
+				#report.write("different N of faces: \n" + str(n_faces_after) + "\n\n")
 			#
 			#n_faces_after = len(mesh.faces())
 			#if n_faces_after == n_faces_before:			
 			#	report.write("STILL the same n of faces after reverse orientation: \n" + str(n_faces_after) + "\n\n")
 
 			
-		report.write("mesh face vertex indices after adding faces from polygon: \n" + str(mesh.face_vertex_indices()) + "\n\n")
+		#report.write("mesh face vertex indices after adding faces from polygon: \n" + str(mesh.face_vertex_indices()) + "\n\n")
 	
-	report.write("all points before deleting all vertices: \n" + str(mesh.points()) + "\n\n")		
+	#report.write("all points before deleting all vertices: \n" + str(mesh.points()) + "\n\n")		
 	
 
 	#delete start vertices	: brise i stvari koje nisu start pointovi
@@ -748,23 +791,18 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 	
 	
 	
-	for fh in mesh.faces():
-		fvi = mesh.face_vertex_indices()[fh.idx()]
-		fp = mesh.points()[fvi]
-		plot_face(fp, axes)
+#	for fh in mesh.faces():
+#		fvi = mesh.face_vertex_indices()[fh.idx()]
+#		fp = mesh.points()[fvi]
+#		plot_face(fp, axes)
 	
-	
-	
-	
-	
-	
-	
-	
-	for vh in mesh.vertices():
-		vpoint = mesh.points()[vh.idx()]
+	mesh_points = mesh.points().tolist()
+	for i in range(len(mesh_points)):
+		vpoint = np.asarray(mesh_points[i])
 		for start_point in start_points:
 			if np.array_equal(vpoint, start_point) == True:
-				report.write("start point koji je algoritam uzeo za brisanje: \n" + str(vpoint) + "\n\n")
+				#report.write("start point koji je algoritam uzeo za brisanje: \n" + str(vpoint) + "\n\n")
+				vh = mesh.vertex_handle(i)
 				mesh.delete_vertex(vh, False)
 	mesh.garbage_collection()	
 		
@@ -772,8 +810,8 @@ def BowyerWatson_triangulation_algorithm_backup(points, report):	#jos ga muci ne
 	#	vh = mesh.vertex_handle(id)
 	#	mesh.delete_vertex(vh)			#vh iz start vh se promijenio; vise nisu tocke supertrokuta
 	#mesh.garbage_collection()	
-	report.write("mesh face vertex indices after deleting start vertices: \n" + str(mesh.face_vertex_indices()) + "\n\n")
-	report.write("all points after deleting start vertices: \n" + str(mesh.points()) + "\n\n")
+	#report.write("mesh face vertex indices after deleting start vertices: \n" + str(mesh.face_vertex_indices()) + "\n\n")
+	#report.write("all points after deleting start vertices: \n" + str(mesh.points()) + "\n\n")
 	#isloated_points = np.empty((0,3))
 	#for vh in mesh.vertices():
 	#	i = 0
@@ -888,7 +926,7 @@ def is_point_inside_closed_mesh(point, form_mesh):		#prvo gleda jeli point na fa
 	#arithmetic_middle =	np.sum(mesh.points(), axis = 0) / (mesh.points().shape[0])	
 	#point_vector = point - arithmetic_middle
 	#point_vector = np.random.rand(1,3)
-	checked_fh = []
+	checked_fh_idx = []
 	intersection_list = [] #intersection list je lista sa ip koji su se vec desili
 	int_counter = 0
 	face_centroid = form_mesh.calc_face_centroid(form_mesh.face_handle(0))		#face centroid je centar facea sa indeksom 0
@@ -896,24 +934,23 @@ def is_point_inside_closed_mesh(point, form_mesh):		#prvo gleda jeli point na fa
 	#report.write("face0:\n " + str(form_mesh.points()[form_mesh.face_vertex_indices()[0]]))
 	#report.write("\n\nface0 centroid:\n " + str(face_centroid))
 	#prva provijera je jeli point vec lezi na jednom od faceva; ovo je odvojena petlja jel se nekad zna desit da face na kojem point lezi je dodan u checked_fh ako j pogodjen u edge koji ga granici
-	for fh in form_mesh.faces():
-		fvi = form_mesh.face_vertex_indices()[fh.idx()]
+	form_mesh_fvi = form_mesh.face_vertex_indices().tolist()
+	form_mesh_points =  form_mesh.points()
+	for fvi in form_mesh_fvi:
 		face_points = form_mesh.points()[fvi]
 		if is_inside_triangle(point, face_points):	#jeli point na na faceu; ako je automatski je point unutar mesha		#t mora bit pozitivan!!!!!!!!!
 			return True	
 	
-	for fh in form_mesh.faces():
-		#report.write("\n\nfor fh idx:\n " + str(fh.idx()))
-		if fh not in checked_fh:
-			checked_fh.append(fh)
-			fvi = form_mesh.face_vertex_indices()[fh.idx()]
-			face_points = form_mesh.points()[fvi]
+	for fh_idx in range(len(form_mesh_fvi)):
+		if fh_idx not in checked_fh_idx:
+			checked_fh_idx.append(fh_idx)
+			fvi = form_mesh_fvi[fh_idx]
+			face_points = form_mesh_points[fvi]
 			data1 = get_intersection(point, point_vector, face_points) 
 			intersection_point = data1[0]
 			intersection_parameter = data1[1]
 			if (intersection_point is not None) and (intersection_parameter > 0) and (intersection_point.tolist() not in intersection_list):	#ako se taj intersection vec jedamput desio
 				intersection_list.append(intersection_point.tolist())
-				#report.write("\nintersection at:\n " + str(intersection_point))
 				int_counter += 1
 				data2 = is_point_on_edge_or_vertex(point, form_mesh)		#provijera jeli point na edgu ili verteksu
 				if data2[0] == True:
@@ -1069,7 +1106,6 @@ def slice_mesh(mesh, intersection_points, inside_points, outside_points, report)
 		sliced_mesh.garbage_collection()
 		
 	delete_isolated_vertices(sliced_mesh)
-	sliced_mesh.garbage_collection()
 	print(len(new_faces_meshes))
 	
 	return sliced_mesh
@@ -1261,29 +1297,78 @@ def plot_face(points, axes, color = "red"):
 		side = axes.plot(plot_points[:,0], plot_points[:,1], plot_points[:,2], color = color)
 
 
+#old
+#def subdivide_mesh(mesh_list, c = 0 ,n = 1): #face po face subdividamo n puta,c je counter
+#	if c < n:
+#		new_meshes = []
+#		for mesh in mesh_list:
+#			for fh in mesh.faces():
+#				face_points = np.empty((0,3))
+#				midpoints = np.empty((0,3))
+#				#i=0
+#				
+#				for heh in mesh.fh(fh):
+#					#i+=1
+#					#print(i)
+#					hevi = mesh.halfedge_vertex_indices()[heh.idx()]
+#					halfedge_points = mesh.points()[hevi] 
+#					face_points = np.append(face_points, np.expand_dims(halfedge_points[0], axis = 0), axis = 0)	# da se zadrzi orijentacija
+#					midpoint = halfedge_points[0] + (halfedge_points[1] - halfedge_points[0]) * 0.5
+#					#print(midpoint)
+#					midpoints =  np.append(midpoints, np.expand_dims(midpoint, axis = 0), axis = 0)
+#				#print(face_points)
+#				#print(midpoints)
+#				new_mesh = om.TriMesh()
+#				vhandles = []
+#				fhandles = []
+#				for point in np.append(face_points, midpoints, axis = 0):
+#					vhandles.append(new_mesh.add_vertex(point))
+#				
+#				
+#				#vhandles(0-2) = face points, vhandles(3-5) midpoints
+#				#print(np.append(face_points, midpoints, axis = 0))
+#				#print(len(vhandles))
+#				fhandles.append(new_mesh.add_face(vhandles[0], vhandles[3], vhandles[5]))
+#				fhandles.append(new_mesh.add_face(vhandles[3], vhandles[1], vhandles[4]))
+#				fhandles.append(new_mesh.add_face(vhandles[5], vhandles[3], vhandles[4]))
+#				fhandles.append(new_mesh.add_face(vhandles[5], vhandles[4], vhandles[2]))
+#				new_meshes.append(new_mesh)
+#	
+#		return subdivide_mesh(new_meshes, c = c + 1, n = n)
+#	
+#	else:
+#		return hard_merge_meshes(mesh_list)
 
 
 
 
 
-
-
-			
+			#stalno vrti iste
 
 def subdivide_mesh(mesh_list, c = 0 ,n = 1): #face po face subdividamo n puta,c je counter
 	if c < n:
 		new_meshes = []
 		for mesh in mesh_list:
-			for fh in mesh.faces():
+			#print(mesh.face_halfedge_indices())
+			mesh_points =  mesh.points()
+			mesh_fvi = mesh.face_vertex_indices().tolist()
+			mesh_hei = mesh.face_halfedge_indices().tolist() #lista sa 3 vrijednosti unutra
+			face_hevi = mesh.halfedge_vertex_indices().tolist() #heh idx -> vertex indices	#lista [.........] velika sa slistama od 2 point = points[vindices]
+			#print(face_hevi)
+			#input()
+			for i in range(len(mesh_fvi)): #i je idx od fh
 				face_points = np.empty((0,3))
 				midpoints = np.empty((0,3))
 				#i=0
-				
-				for heh in mesh.fh(fh):
+				for j in mesh_hei[i]: #j je idx od heh za halfedgeve na tom faceu /za svaki halfedge handleidx u faceu
+					
+					#halfedge_vertex_indices = 
 					#i+=1
 					#print(i)
-					hevi = mesh.halfedge_vertex_indices()[heh.idx()]
-					halfedge_points = mesh.points()[hevi] 
+					hevi = (face_hevi[j])	#tu se vrti
+					#print(hevi,j)
+					halfedge_points = mesh_points[hevi] #array 
+					#print(halfedge_points)
 					face_points = np.append(face_points, np.expand_dims(halfedge_points[0], axis = 0), axis = 0)	# da se zadrzi orijentacija
 					midpoint = halfedge_points[0] + (halfedge_points[1] - halfedge_points[0]) * 0.5
 					#print(midpoint)
@@ -1310,7 +1395,7 @@ def subdivide_mesh(mesh_list, c = 0 ,n = 1): #face po face subdividamo n puta,c 
 	
 	else:
 		return hard_merge_meshes(mesh_list)
-		
+		#return soft_merge_meshes(mesh_list)
 		
 		
 		
@@ -1321,8 +1406,8 @@ def divide_points_by_outside_mesh(block_mesh, form_mesh):	#2 slucaja: kada je me
 	inside_points = np.empty((0,3)) # ako je point na granici mesha onda se smatra da je unutar mesha
 	closed_mesh = is_mesh_closed(form_mesh)
 	if closed_mesh == True:
-		for vh in block_mesh.vertices():
-			point = block_mesh.points()[vh.idx()]
+		mesh_points = block_mesh.points()
+		for point in mesh_points:
 			if is_point_inside_closed_mesh(point, form_mesh) == True:
 				inside_points = np.append(inside_points, np.expand_dims(point, axis = 0), axis = 0)
 			else:
@@ -1331,8 +1416,8 @@ def divide_points_by_outside_mesh(block_mesh, form_mesh):	#2 slucaja: kada je me
 	
 	
 	elif closed_mesh == False:	#forma broda
-		for vh in block_mesh.vertices():
-			point = block_mesh.points()[vh.idx()]
+		mesh_points = block_mesh.points()
+		for point in mesh_points:
 			if is_point_inside_open_mesh(point, form_mesh) == True:
 				inside_points = np.append(inside_points, np.expand_dims(point, axis = 0), axis = 0)
 			else:
@@ -1417,24 +1502,25 @@ def cut_meshes(block_mesh, form_mesh):
 		report = open("report.txt", "w")
 		objects = {}
 		max_subdiv = 3
-		for i in range(max_subdiv):
-			intersection_points = get_meshes_intersections(block_mesh, form_mesh)
-			#print(intersection_points)
-			block_data = divide_points_by_outside_mesh(block_mesh, form_mesh)
-			block_inside_points = block_data["inside points"]
-			block_outside_points = block_data["outside points"]
-			form_data = divide_points_by_outside_mesh(form_mesh, block_mesh)			
-			form_inside_points = form_data["inside points"]
-			form_outside_points = form_data["outside points"]
-			if form_inside_points.shape[0] == 0 or block_inside_points.shape[0] == 0:
-				pass
-				block_mesh = subdivide_mesh([block_mesh])
-				form_mesh = subdivide_mesh([form_mesh])
-			else:
-				break
+		#for i in range(max_subdiv):
+		intersection_points = get_meshes_intersections(block_mesh, form_mesh)
+		#print(intersection_points)
+		block_data = divide_points_by_outside_mesh(block_mesh, form_mesh)
+		block_inside_points = block_data["inside points"]
+		block_outside_points = block_data["outside points"]
+		form_data = divide_points_by_outside_mesh(form_mesh, block_mesh)			
+		form_inside_points = form_data["inside points"]
+		form_outside_points = form_data["outside points"]
+		block_mesh = subdivide_mesh([block_mesh])
 			
+		#if form_inside_points.shape[0] == 0 or block_inside_points.shape[0] == 0:
+		#	block_mesh = subdivide_mesh([block_mesh])
+		#	form_mesh = subdivide_mesh([form_mesh])
+		#else:
+		#	break
+		
 			
-		#print(form_inside_points)
+		#print(block_inside_points)
 		mesh1 = slice_mesh(block_mesh, intersection_points, block_inside_points, block_outside_points, report)		#complex edgevi
 		mesh2 = slice_mesh(form_mesh, intersection_points, form_inside_points, form_outside_points, report)
 		help_axes = make_help_axes()
@@ -1454,10 +1540,10 @@ def cut_meshes(block_mesh, form_mesh):
 def make_subdiv_block_csv():
 	block_dims = np.array([1,1,1])
 	mesh = make_block(block_dims)
-	mesh = subdivide_mesh([mesh], n = 3)
+	mesh = subdivide_mesh([mesh], n = 1)
 	points = mesh.points().tolist()
 	fvi = mesh.face_vertex_indices().tolist()
-	
+
 	with open("unit_block_points.csv", "w", newline = "") as csv_file:
 		csv_writer = csv.writer(csv_file)
 		for point in points:
@@ -1477,11 +1563,273 @@ def	make_block_from_unit_csv(block_dims = np.array([1,1,1]), move_vector = np.ar
 		csv_reader = csv.reader(csv_file)
 		fvi = np.asarray([line for line in csv_reader]).astype(int)
 	
-	return om.TriMesh(points*block_dims + move_vector, fvi)
+
+	return om.TriMesh(points * block_dims + move_vector, fvi)
 	
+def is_point_inside_form_mesh_y(point, form_fh_idx_to_check, form_mesh): #ovdje je moguc samo jedan intersection sa formom( ako idemo od xz ravnine)
+	point_vector_j = np.array([0,1,0])
+	form_mesh_points = form_mesh.points()
+	form_mesh_fvi = form_mesh.face_vertex_indices().tolist()
 	
+	for fh_idx in form_fh_idx_to_check:
+		fvi = form_mesh_fvi[fh_idx]
+		face_points = form_mesh_points[fvi]
+		if is_inside_triangle(point, face_points):	#jeli point na nekom faceu
+			return (True, point)
+		
+		#print(point, face_points)
+		intersection_point = get_intersection(point, point_vector_j, face_points)[0]
+		#print(intersection_point)
+		if intersection_point is not None:
+			if abs(point[1]) <= abs(intersection_point[1]):  		#ako je abs(y) manji ili jednak od abs(IPy) : point lezi u meshu
+				return (True, intersection_point) 
+			else:
+				return (False, intersection_point)
+		
+	else:
+		return (None, point) 
+
 	
-#make_block_from_unit_csv("C:\\Users\\Tomislav\\Desktop\\Py_Prog")
+def is_point_inside_form_mesh_x(point, form_fh_idx_to_check, form_mesh): #ovdje je moguc samo jedan intersection sa formom( ako idemo od xz ravnine)
+	point_vector_x = np.array([1,0,0])
+	form_mesh_points = form_mesh.points()
+	form_mesh_fvi = form_mesh.face_vertex_indices().tolist()
+	
+	for fh_idx in form_fh_idx_to_check:
+		fvi = form_mesh_fvi[fh_idx]
+		face_points = form_mesh_points[fvi]
+		if is_inside_triangle(point, face_points):	#jeli point na nekom faceu
+			return (True, point)
+		
+		intersection_point = get_intersection(point, point_vector_x, face_points)[0]
+		if intersection_point is not None:
+			xi = intersection_point[0] 
+			xp = point[0]
+			delta = xi - xp
+			fh = form_mesh.face_handle(fh_idx)
+			f_normal = form_mesh.calc_face_normal(fh)
+			if f_normal[0] < 0:	#face je na krmi 
+				if delta < 0:
+					return (True, point)
+				else:
+					return (False, intersection_point)
+				
+			elif f_normal[0] > 0: #face je na palubi
+				if delta > 0:
+					return (True, point)
+				else:
+					return (False, intersection_point)
+			
+	return (True, point)
+
+	
+#ekskluzivno za formu broda
+def fit_block_to_form(block_mesh, block_dims, block_position, form_mesh):
+	#1) koji facevi su blizu blocka
+	form_mesh_fvi = form_mesh.face_vertex_indices().tolist()
+	form_mesh_vfi = form_mesh.vertex_face_indices().tolist()
+	form_mesh_ffi = form_mesh.face_face_indices().tolist()
+	form_mesh_points = form_mesh.points()
+	xmin = block_position[0] 
+	xmax = block_position[0] + block_dims[0]
+	ymin = block_position[1] 
+	ymax = block_position[1] + block_dims[1]
+	zmin = block_position[2]
+	zmax = block_position[2] + block_dims[2]
+	
+	near_fh_idx_list = []
+	
+	#trazi fh_idx od svih faceva koji imaju tocku u projekciji sa blokm na xz ravninu
+	for vh_idx in range(form_mesh_points.shape[0]):
+		point = form_mesh_points[vh_idx]
+		if (xmin <= point[0] <= xmax) and (ymin <= point[1] <= ymax) and (zmin <= point[2] <= zmax): #ako je point izmedju projekcije
+			neighbouring_fh_idx = form_mesh_vfi[vh_idx]
+			near_fh_idx_list += neighbouring_fh_idx 
+
+	#micanje duplikata i -1 u listi
+	near_fh_idx_list = set(near_fh_idx_list)
+	near_fh_idx_list = list(near_fh_idx_list)
+	try:
+		near_fh_idx_list.remove(-1)
+	except:
+		pass
+	#trazenje susjednih facea susjednim facevima
+	extra_fh_idx = []
+	for fh_idx in near_fh_idx_list:
+		neighbouring_fh_idx = form_mesh_ffi[fh_idx]
+		extra_fh_idx += neighbouring_fh_idx
+
+	near_fh_idx_list += extra_fh_idx
+	#micanje duplikata i -1 u listi
+	near_fh_idx_list = set(near_fh_idx_list)
+	near_fh_idx_list = list(near_fh_idx_list)
+	try:
+		near_fh_idx_list.remove(-1)
+	except:
+		pass
+	
+	#trazenje jos susjednih faceva
+	extra_fh_idx = []
+	for fh_idx in near_fh_idx_list:
+		neighbouring_fh_idx = form_mesh_ffi[fh_idx]
+		extra_fh_idx += neighbouring_fh_idx
+
+	near_fh_idx_list += extra_fh_idx
+	#micanje duplikata i -1 u listi
+	near_fh_idx_list = set(near_fh_idx_list)
+	near_fh_idx_list = list(near_fh_idx_list)
+	try:
+		near_fh_idx_list.remove(-1)
+	except:
+		pass
+		
+	#jesu li facevi na krmi ili palubi?
+	fh = form_mesh.face_handle(near_fh_idx_list[0])
+	normal = form_mesh.calc_face_normal(fh)
+	normal = np.sign(normal[0])
+	#print(normal)
+	
+	#micanje tocaka na formu po y:
+	block_mesh_points = block_mesh.points()
+	x_outside_points_vh_idx = []
+	x_inside_points_vh_idx = []	
+	for vh_idx in range(block_mesh_points.shape[0]):
+		block_point = block_mesh_points[vh_idx]
+		data = is_point_inside_form_mesh_y(block_point, near_fh_idx_list, form_mesh)	#ispitivanje po y osi
+		#print(data)
+		#input()
+		if data[0] == False:
+			intersection_point = data[1]
+			vh = block_mesh.vertex_handle(vh_idx)
+			block_mesh.set_point(vh, intersection_point)
+			x_inside_points_vh_idx.append(vh_idx)
+		elif data[0] == None:
+			x_outside_points_vh_idx.append(vh_idx)
+	
+	if len(x_outside_points_vh_idx) != 0:	#ako ima outside tocaka
+		block_mesh_points = block_mesh.points()
+		#block_inside_points = block_mesh_points[x_inside_points_vh_idx]
+		block_outside_points = block_mesh_points[x_outside_points_vh_idx]
+		
+		if normal > 0:	#pramac	min y na max x
+			for vh_idx in x_outside_points_vh_idx:
+				outside_point =  block_mesh_points[vh_idx]
+				vh = block_mesh.vertex_handle(vh_idx)
+				point_to_set_to = np.array([outside_point[0],block_position[1],outside_point[2]])
+				block_mesh.set_point(vh, point_to_set_to)
+		
+		elif normal < 0: #krma	max y na min x
+			block_inside_points = block_mesh_points[x_inside_points_vh_idx]
+			block_zs = np.unique(block_mesh_points[:,2]) #trebam li ovo refreshat?
+			for block_z in block_zs:
+				block_inside_points_with_same_z = np.unique(block_inside_points[np.where(block_inside_points[:,2] == block_z)], axis = 0)
+				block_outside_points_with_same_z = np.unique(block_outside_points[np.where(block_outside_points[:,2] == block_z)], axis = 0)
+				
+				min_x_points = block_inside_points_with_same_z[np.where(block_inside_points_with_same_z[:,0] == np.min(block_inside_points_with_same_z[:,0]))]
+				max_y_point = min_x_points[np.where(min_x_points[:,1] == np.max(min_x_points[:,1]))][0]	#0 na kraju za slucaj da ih je vise na istoj tocki
+				
+				for vh_idx in x_outside_points_vh_idx:
+					outside_point = block_mesh_points[vh_idx]
+					vh = block_mesh.vertex_handle(vh_idx)
+					point_to_set_to = np.array([outside_point[0],block_position[1],outside_point[2]])
+					block_mesh.set_point(vh, point_to_set_to)
+				
+	
+		block_mesh_points = block_mesh.points()
+		for vh_idx in x_outside_points_vh_idx:
+			block_point = block_mesh_points[vh_idx]
+			data = is_point_inside_form_mesh_x(block_point, near_fh_idx_list, form_mesh)	#ispitivanje po x osi
+			if data[0] == False:
+				intersection_point = data[1]
+				vh = block_mesh.vertex_handle(vh_idx)
+				block_mesh.set_point(vh, intersection_point)		
+
+			
+			
+			
+			
+			
+			
+#			data = is_point_inside_form_mesh_y(block_point, near_fh_idx_list, form_mesh)	#ispitivanje po y osi
+#			#print(data)
+#			#input()
+#			if data[0] == False:
+#				intersection_point = data[1]
+#				vh = block_mesh.vertex_handle(vh_idx)
+#				block_mesh.set_point(vh, intersection_point)
+#				x_inside_points_vh_idx.append(vh_idx)
+#			elif data[0] == None:
+#				x_outside_points_vh_idx.append(vh_idx)
+	
+		#elif data[0] is None:
+		#	data = is_point_inside_form_mesh_x(block_point, near_fh_idx_list, form_mesh)	#ispitivanje po x osi
+		#	if data[0] == False:
+		#		intersection_point = data[1]
+		#		vh = block_mesh.vertex_handle(vh_idx)
+		#		block_mesh.set_point(vh, intersection_point)		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+#		#trazenje referentnih tocaka za svaki z () max ili min y
+#		block_zs = np.unique(block_mesh_points[:,2]) #trebam li ovo refreshat?
+#		for block_z in block_zs:
+#			block_inside_points_with_same_z = np.unique(block_inside_points[np.where(block_inside_points[:,2] == block_z)], axis = 0)
+#			block_outside_points_with_same_z = np.unique(block_outside_points[np.where(block_outside_points[:,2] == block_z)], axis = 0)
+#			
+#			if normal > 0:	#pramac	min y na max x
+#				max_x_points = block_inside_points_with_same_z[np.where(block_inside_points_with_same_z[:,0] == np.max(block_inside_points_with_same_z[:,0]))]
+#				min_y_point = max_x_points[np.where(max_x_points[:,1] == np.min(max_x_points[:,1]))][0]	#0 na kraju za slucaj da ih je vise na istoj tocki
+#				
+#				for vh_idx in x_outside_points_vh_idx:
+#					outside_point = block_mesh_points[vh_idx]
+#					vh = block_mesh.vertex_handle(vh_idx)
+#					point_to_set_to = np.array([outside_point[0],block_position[1],outside_point[2]])
+#					block_mesh.set_point(vh, point_to_set_to)
+#				
+#			elif normal < 0: #krma	max y na min x
+#				pass
+				
+				
+		
+		
+		#elif data[0] is None:
+		#	data = is_point_inside_form_mesh_x(block_point, near_fh_idx_list, form_mesh)	#ispitivanje po x osi
+		#	if data[0] == False:
+		#		intersection_point = data[1]
+		#		vh = block_mesh.vertex_handle(vh_idx)
+		#		block_mesh.set_point(vh, intersection_point)
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+#make_block_from_unit_csv(path = "C:\\Users\\Tomislav\\Desktop\\Py_Prog\\")
 	
 		
 #make_subdiv_block_csv()
@@ -1547,14 +1895,29 @@ def	make_block_from_unit_csv(block_dims = np.array([1,1,1]), move_vector = np.ar
 
 
 
-
-
-
-
-
-
-
-
+#test isolated_vert and hard_merge_meshes
+#mesh = om.TriMesh()
+#points = np.array([[0,0,0],[1,0,0],[0,1,0],[1,1,0],[1,1,1]])
+#fvi = np.array([[0,1,2],[1,3,2]])
+#mesh = om.TriMesh(points, fvi)
+#mesh = make_block()
+#print(mesh.face_face_indices())
+#print(mesh.points())
+#vh1 = mesh.add_vertex(np.array([0,0,0]))
+#vh2 = mesh.add_vertex(np.array([0,6,0]))
+#vh3 = mesh.add_vertex(np.array([20,0,0]))
+#mesh.add_face(vh1,vh2,vh3)
+#delete_isolated_vertices(mesh)
+#print(mesh.points())
+#for point in points:
+#	vhandles.append(mesh.add_vertex(point))
+#fh1 = mesh.add_face(vhandles[0],vhandles[1],vhandles[2])
+#test subdiv na 2 trok i blok
+#mesh = subdivide_mesh([mesh])
+#print(len(mesh.faces()))
+#print(is_mesh_closed(mesh))
+#print(mesh.points().shape[0])
+#print(np.unique(mesh.points(),axis = 0).shape[0])
 
 
 

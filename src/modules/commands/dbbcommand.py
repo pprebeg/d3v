@@ -6,7 +6,7 @@ import openmesh as om
 import numpy as np
 from signals import Signals
 from geometry import Geometry
-from dbb import DBBProblem,DBB,DBBHullForm
+from dbb import DBBProblem,DBB,DBBHullForm, DBBDeck
 import os
 from PySide2.QtCore import Slot
 import dbbmenus as mm
@@ -16,7 +16,9 @@ class DBBCommand(Command):
 	def __init__(self):
 		super().__init__()
 		app = QApplication.instance()
-		app.registerIOHandler(DBBImporter())
+		importer=DBBImporter()
+		importer.fsetproblem=self.setProblem
+		app.registerIOHandler(importer)
 		self.mainwin = app.mainFrame
 		self.dbbprop = DialogDBBProps(self.mainwin)
 		self.dbbproblem=0
@@ -32,7 +34,7 @@ class DBBCommand(Command):
 		
 		self.menuInitTestProblem = self.menuMain.addAction("TestProblem")
 		self.menuInitTestProblem.triggered.connect(self.onGenerateTestProblerm)
-
+		
 		self.menuModifyBlock = QMenu("&Modify block")
 		self.menu2 = QMenu("&Menu2")
 		self.menuMain.addMenu(self.menuModifyBlock)
@@ -45,6 +47,9 @@ class DBBCommand(Command):
 
 		menuSetPosition = self.menuModifyBlock.addAction("Set Position")
 		menuSetPosition.triggered.connect(self.onSetPosition)
+				
+		self.menuDeleteSelected = self.menuModifyBlock.addAction("Delete Selected")
+		self.menuDeleteSelected.triggered.connect(self.onDeleteSelected)
 		
 		menuCutBlock = self.menuModifyBlock.addAction("Cut Block")
 		menuCutBlock.triggered.connect(self.onCutBlock)
@@ -62,6 +67,9 @@ class DBBCommand(Command):
 		Signals.get().geometryAdded.connect(self.registerDBB)
 		Signals.get().selectionChanged.connect(self.registerSelection)
 		self.dbb = 0
+
+	def setProblem(self,dbbproblem):
+		self.dbbproblem=dbbproblem
 
 	@Slot()
 	def registerDBB(self, dbbproblem):
@@ -81,19 +89,27 @@ class DBBCommand(Command):
 		block_dims = BlockMenu.run()
 		
 		if block_dims is not None and scale is not None:	#ako niti jedan od menia nije cancelan
-			dbbproblem = DBBProblem("")
-			dbbproblem.testProblem(scale, block_dims)
-			Signals.get().geometryImported.emit(dbbproblem.hull)
-			for deck in dbbproblem.decks:
+			self.dbbproblem = DBBProblem("")
+			self.dbbproblem.testProblem(scale, block_dims)
+			Signals.get().geometryImported.emit(self.dbbproblem.hull)
+			for deck in self.dbbproblem.decks:
 				Signals.get().geometryImported.emit(deck)
-			for dbb in dbbproblem.dbbs:
+			for dbb in self.dbbproblem.dbbs:
 				Signals.get().geometryImported.emit(dbb)
 			self.menuInitTestProblem.setEnabled(False)
 
+	def onDeleteSelected(self):
+		if self.si.haveSelection():
+			currDBB=self.si.getGeometry()
+			print(self.dbbproblem)
+			if isinstance(currDBB, DBB) or isinstance(currDBB, DBBHullForm) or isinstance(currDBB, DBBDeck):
+				self.dbbproblem.dbbs.remove(currDBB)
+				Signals.get().geometryRemoved.emit(currDBB)	#refresha!!!!!!
+	
 	def onMoveDBB(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB,DBB) or isinstance(currDBB,DBBHullForm) or isinstance(currDBB,DBBDeck):
+			if isinstance(currDBB, DBB) or isinstance(currDBB, DBBHullForm) or isinstance(currDBB, DBBDeck):
 				MoveMenu = mm.Move_Dialog()
 				move_vector = MoveMenu.run()
 				if move_vector is not None:
@@ -102,7 +118,7 @@ class DBBCommand(Command):
 					#self.dbbprop.setCurrentDBB(currDBB)
 					#self.dbbprop.moveCurrentDBB()
 					##
-	
+
 	def onSetPosition(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
@@ -138,16 +154,16 @@ class DBBCommand(Command):
 		folder_path = ImportFromCsvMenu.run()	#dodaj jos uvijet da se u folderu nalaze prave datoteke
 
 		
-		dbbproblem = DBBProblem("")
-		dbbproblem.readProblem(folder_path)
+		self.dbbproblem = DBBProblem("")
+		self.dbbproblem.readProblem(folder_path)
 		#make form from huf
 		#with open(huf_path, "r") as csv: 
 		
 		#tu ih emmita u vizualizaciju
-		Signals.get().geometryImported.emit(dbbproblem.hull)
-		for deck in dbbproblem.decks:
+		Signals.get().geometryImported.emit(self.dbbproblem.hull)
+		for deck in self.dbbproblem.decks:
 			Signals.get().geometryImported.emit(deck)
-		for dbb in dbbproblem.dbbs:
+		for dbb in self.dbbproblem.dbbs:
 			Signals.get().geometryImported.emit(dbb)
 		#self.menuInitTestProblem.setEnabled(False)
 
@@ -163,6 +179,7 @@ class DBBCommand(Command):
 class DBBImporter(IOHandler):
 	def __init__(self):
 		super().__init__()
+		self.fsetproblem=0
 
 	def importGeometry(self, fileName):
 		if len(fileName) < 1:
@@ -170,11 +187,13 @@ class DBBImporter(IOHandler):
 		filename, file_extension = os.path.splitext(fileName)
 		if file_extension != ".dbb":
 			return
-		dbbproblem = DBBProblem(fileName)
-		Signals.get().geometryImported.emit(dbbproblem.hull)
-		for deck in dbbproblem.decks:
+		self.dbbproblem = DBBProblem(fileName)
+		self.fsetproblem(self.dbbproblem)
+		print(self.dbbproblem)
+		Signals.get().geometryImported.emit(self.dbbproblem.hull)
+		for deck in self.dbbproblem.decks:
 			Signals.get().geometryImported.emit(deck)
-		for dbb in dbbproblem.dbbs:
+		for dbb in self.dbbproblem.dbbs:
 			Signals.get().geometryImported.emit(dbb)
 
 	def getImportFormats(self):

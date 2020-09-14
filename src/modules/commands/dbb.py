@@ -107,7 +107,7 @@ class DBBHullForm (HullForm):
 		self.centroid = np.array([0.,0.,0.])
 		self.LOA = self.shipdata["loa_val"]
 		self.centroid = np.array([self.LOA / 2, 0, 0])  # sredina samo za x za sada
-	
+		#self.mesh = mf.hard_merge_meshes([self.mesh])
 
 	#def readHullForm(self):
 		#HullForm.__init__()
@@ -131,7 +131,7 @@ class DBBHullForm (HullForm):
 		self.mesh = mf.make_form(scale = self.scale, move_vector = self.position)
 
 		
-class DBBDeck (Geometry):
+class DBBDeck(Geometry):
 	def __init__(self, hullform, z, deckIndex):
 		super().__init__()
 		self.hullform = hullform
@@ -146,29 +146,30 @@ class DBBDeck (Geometry):
 	def genMesh(self):	#za keel koji je na 0 nema wl
 		for wline in self.hullform.wlinesPos:
 			if np.isclose(self.z, wline[0][2]):
-				deck_points = np.unique(np.asarray(wline), axis = 0)
+				deck_points = np.asarray(wline)
 				break
-
-		for i in range(deck_points.shape[0]):
-			bad_i = []
-			point = deck_points[i]
-			next_point = deck_points[(i+1) % deck_points.shape[0]]
-			if np.allclose(point, next_point):
-				bad_i.append(i)
-		deck_points = np.delete(deck_points, bad_i, 0)
+		self.mesh = mf.make_deck(deck_points, subdivide = False)
+		#for i in range(deck_points.shape[0]):
+		#	bad_i = []
+		#	point = deck_points[i]
+		#	next_point = deck_points[(i+1) % deck_points.shape[0]]
+		#	if np.allclose(point, next_point):
+		#		bad_i.append(i)
+		#deck_points = np.delete(deck_points, bad_i, 0)
 
 		
-		new_points = []
-		for point in deck_points:
-			if point[1] != 0: #ako point nije na osi x 
-				new_point = copy.copy(point)
-				new_point[1] = 0
-				new_points.append(new_point)
+		#new_points = []
+		#for point in deck_points:
+		#	if point[1] != 0: #ako point nije na osi x 
+		#		new_point = copy.copy(point)
+		#		new_point[1] = 0
+		#		new_points.append(new_point)
 		
-		deck_points = np.append(deck_points, np.asarray(new_points), axis = 0)
+		#deck_points = np.append(deck_points, np.asarray(new_points), axis = 0)
 		#deck_points = np.asarray(deck_points + new_points)
-		deck_points = np.unique(deck_points, axis = 0)		#duplikat na tocki x=50? nakon uniqua, arrejevi su close; ne equal pa ih unique ne reze?
-		self.mesh = mf.flip_mesh_face_orientation(mf.make_deck(deck_points))
+		#deck_points = np.unique(deck_points, axis = 0)		#duplikat na tocki x=50? nakon uniqua, arrejevi su close; ne equal pa ih unique ne reze?
+		
+
 		
 		#print(deck_points)
 		
@@ -177,7 +178,7 @@ class DBBDeck (Geometry):
 		#self.mesh = mf.cut_meshes(self.mesh, self.hullform.mesh) 	#predugo traje
 
 	def move(self, move_vector):
-		self.position += move_vector
+		self.z += move_vector[2]
 		#self.regenerateMesh()
 		self.mesh = mf.move_mesh(self.mesh, move_vector)
 		
@@ -200,7 +201,7 @@ class DBBDeck (Geometry):
 		
 		
 		
-class DBB (Geometry):
+class DBB(Geometry):
 	def __init__(self, hullform, deck:DBBDeck,block_dims, position, abspath):
 		super().__init__()
 		self.folderpath = abspath
@@ -239,6 +240,8 @@ class DBB (Geometry):
 		#self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
 
 	def cutMesh(self):
+		mf.fit_block_to_form(self.mesh, self.block_dims, self.position, self.hullform.mesh)
+		#mf.cut_meshes(self.mesh, self.hullform.mesh)
 		pass
 		
 	def calcVolume(self):
