@@ -1,4 +1,4 @@
-from PySide2.QtWidgets import QApplication, QMenu, QMessageBox,QFormLayout,QWidget,QHeaderView
+from PySide2.QtWidgets import QApplication, QMenu, QMessageBox,QFormLayout,QWidget,QHeaderView,QSlider,QLineEdit
 from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout,QVBoxLayout,QHBoxLayout,QTableView,QTextEdit,QLabel
 from commands import Command
 from iohandlers import IOHandler
@@ -12,6 +12,7 @@ from PySide2.QtCore import Slot,Qt,SIGNAL
 from PySide2.QtCore import QAbstractTableModel, QModelIndex, QRect
 from PySide2.QtGui import QColor, QPainter
 from PySide2.QtCharts import QtCharts
+from PySide2.QtCore import SIGNAL,SLOT
 
 class HullFormCommand(Command):
     def __init__(self):
@@ -90,17 +91,131 @@ class HullFormImporter(IOHandler):
     def getImportFormats(self):
         return (".huf")
 
+class QTextSliderConnect(QLineEdit):
+    def __init__(self, parent,slider):
+        super().__init__(parent)
+        self.slider=slider
+        Signals.connect(self, SIGNAL('editingFinished()'), self, SLOT('updateSlider()'))
+        self.min =0
+        self.max=1
+        self.value = 0
+        self.isTextChangeInProgress=False
+
+    def setminmaxval(self,min,max,val):
+        self.min=min
+        self.max=max
+        self.value=val
+        self.setText(str(self.value))
+        self.updateSlider()
+
+    def updatetxt(self,value):
+        if not self.isTextChangeInProgress:
+            self.value=self.min+(self.max-self.min)*(value-self.slider.minimum())/(self.slider.maximum()-self.slider.minimum())
+            self.setText(str(self.value))
+
+
+    def updateSlider(self):
+        try:
+            self.value=float(self.text())
+            if self.value < self.min:
+                self.value = self.min
+                self.setText(str(self.value))
+            elif self.value > self.max:
+                self.value = self.max
+                self.setText(str(self.value))
+            value=self.value
+            value = int(round(self.slider.minimum()+ (self.slider.maximum()-self.slider.minimum())*(value-self.slider.minimum())/(self.max-self.min)))
+            self.isTextChangeInProgress = True
+            self.slider.setValue(value)
+            self.isTextChangeInProgress = False
+        except ValueError:
+            self.setText(str(self.value))
+            pass
+
+
+class QSliderTextConnect(QSlider):
+    def __init__(self, parent):
+        super().__init__(parent)
+
+
+
 
 class DialogHullFormModify(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
+        self.sizerow = 25
         self.mainwin = parent
-        self.btnModify = self.createButton("&Modify", self.regenerateHullFormMesh)
 
-        mainLayout = QGridLayout()
-        mainLayout.addWidget(self.btnModify, 0, 0)
-        self.setLayout(mainLayout)
+        self.mainLayout = QGridLayout()
+
+        self.setLayout( self.mainLayout)
         self.currentHullForm=0
+        self.shipdatanames=0
+        self.shipdatamins =0
+        self.shipdatamaxs =0
+        self.shipdatatxt = {}
+
+
+    def initDicts(self):
+        self.shipdatanames = {"loa_val":"Overall Length (LOA), m",
+                        "boa_val":"Overall Beam (BOA), m",
+                        'draft_val':"Draft (T)",
+                        "ms_val":"Midship Fullness",
+                        "bow_val":"Bow Fullness",
+                        "tr_val":"Transom Fullness",
+                        "deck_val":"Forward Deck Fullness",
+                        "tb_val":"Transom Beam",
+                        "td_val":"Transom Draught",
+                        "acu_val":"ACU",
+                        "kf_val":"Forward Keel",
+                        "sa_val":"Superstructure Angle, rad"}
+        self.shipdatamins = {"loa_val":0,
+                        "boa_val":0,
+                        'draft_val':0,
+                        "ms_val":0.1,
+                        "bow_val":0.1,
+                        "tr_val":0.1,
+                        "deck_val":0.1,
+                        "tb_val":0.01,
+                        "td_val":0.01,
+                        "acu_val":0.01,
+                        "kf_val":0.51,
+                        "sa_val":0}
+        self.shipdatamaxs  = {"loa_val": 300,
+                        "boa_val": 80,
+                        'draft_val': 10,
+                        "ms_val": 10,
+                        "bow_val": 10,
+                        "tr_val": 10,
+                        "deck_val": 10,
+                        "tb_val": 0.99,
+                        "td_val": 0.99,
+                        "acu_val": 0.49,
+                        "kf_val": 0.99,
+                        "sa_val": 0.8}
+    def createUserInputs(self,gridLayout:QGridLayout):
+        i=0
+        for key,value in self.shipdatanames.items():
+            lbl = QLabel(value)
+            lbl.setFixedHeight(self.sizerow)
+            val = self.currentHullForm.shipdata[key]
+            slider = QSliderTextConnect(Qt.Horizontal)
+            slider.setFixedHeight(self.sizerow)
+            txt = QTextSliderConnect(self,slider)
+            self.shipdatatxt[key]=txt
+            txt.setAlignment(Qt.AlignRight)
+            txt.setFixedHeight(self.sizerow)
+            txt.setFixedWidth(50)
+            slider.valueChanged.connect(txt.updatetxt)
+            slider.setMinimum(0)
+            slider.setMaximum(1000)
+            txt.setminmaxval(self.shipdatamins[key],self.shipdatamaxs[key],val)
+            gridLayout.addWidget(lbl, i, 0)
+            gridLayout.addWidget(txt, i, 1)
+            gridLayout.addWidget(slider, i, 2)
+            i=i+1
+        return i
+
 
 
     def createButton(self, text, member):
@@ -109,12 +224,20 @@ class DialogHullFormModify(QDialog):
         return button
 
     def regenerateHullFormMesh(self):
-        self.currentHullForm.move(1, 0, 0)
-        Signals.get().geometryRebuild.emit(self.currentHullForm)
+
+        #self.currentHullForm.generateMesh()
+        #Signals.get().geometryRebuild.emit(self.currentHullForm)
+        pass
 
     def setCurrentHullForm(self, currentHullForm):
         self.currentHullForm = currentHullForm
         self.setWindowTitle("Modify Hull Form")
+        self.initDicts()
+        irow = self.createUserInputs(self.mainLayout)
+        btnModify = self.createButton("&Modify", self.regenerateHullFormMesh)
+        btnModify.setFocusPolicy(Qt.NoFocus)
+        self.mainLayout.addWidget(btnModify, irow, 0)
+
 
 class CustomTableModel(QAbstractTableModel):
     def __init__(self):
@@ -147,7 +270,7 @@ class CustomTableModel(QAbstractTableModel):
             return None
 
         if orientation == Qt.Horizontal:
-            self.input_names[section]
+            return self.input_names[section]
         else:
             return "{}".format(section + 1)
 
@@ -250,23 +373,24 @@ class DialogHullFormHydrostaticCurves(QDialog):
         return button
 
     def refreshResults(self):
-        #self.currentHUS.getResults(9, 1.025)
+        #self.currentHullForm.getResults(9, 1.025)
         #return
         input_data = []
+        mjerilo = [1,1/95,1/45,1,1/0.2,1,1/480,1/12220,1/0.225,1/15,1/2,1/200,1/90,1/0.009,1/0.006,1/0.007,1/0.008]
         maxWL= float(self.txtMaxWL.toPlainText())
         stepWL = float(self.txtWLStep.toPlainText())
         h=maxWL
         while h > 0:
             result = self.currentHullForm.getResults(h, 1.025)
-            input_data.append(result)
+            input_data.append([a*b for a,b in zip(result,mjerilo)])
             h=h-stepWL
             if h <= 0:
-                result = self.currentHullForm.getResults(0.001, 1.025)
-                input_data.append(result)
+                result = self.currentHullForm.getResults(1, 1.025)
+                input_data.append([a*b for a,b in zip(result,mjerilo)])
 
 
-        input_names = ['h', 'Volume', 'Awl', 'Xwl', 'KBz', 'KBx', 'Ib', 'Il', 'Lwl', 'Bwl', 'MF area',
-                       'MoB','KMo','MlB','KMl','JZ','Cwl','CB','CP','CX']
+        input_names = ['h', 'Volume', 'Awl', 'Xwl', 'KBz', 'KBx', 'Ib', 'Il',
+                       'KMo','KMl','JZ', 'M1','delta','Cwl','CB','CP','CX']
         #input_names = ['h', 'Volume', 'Awl']
 #        self.model.layoutAboutToBeChanged()
         self.model.setInputData(input_names, input_data)
@@ -274,11 +398,12 @@ class DialogHullFormHydrostaticCurves(QDialog):
         self.chart.removeAllSeries()
         seriesColorHex = "#000000"
         for i in range(1, len(input_names)):
-            series = QtCharts.QLineSeries()
+            series = QtCharts.QSplineSeries()
+            series.setColor(QColor('darkturquoise'))
             series.setName(input_names[i])
             mapper = QtCharts.QVXYModelMapper(self)
-            mapper.setXColumn(0)
-            mapper.setYColumn(i)
+            mapper.setYColumn(0)
+            mapper.setXColumn(i)
             mapper.setSeries(series)
             mapper.setModel(self.model)
             self.chart.addSeries(series)

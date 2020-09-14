@@ -97,7 +97,7 @@ class HullForm(Geometry):
         pass
 
 
-    def getResults(self,h,seaDensity):
+    def getResultsOld(self,h,seaDensity):
         tsStart = time.perf_counter()
         results = []
         fvs = self.mesh.fv_indices().tolist()
@@ -119,6 +119,31 @@ class HullForm(Geometry):
 
 
         hsdata = self.getHydrostaticData(seaDensity,h,volume,area,Ib, Il,KBz,Lwl,Bwl,mfarea)
+        dtAll = time.perf_counter() - tsStart
+        print("Hydrostatic results calc time:", dtAll)
+        results = bcwl+hsdata
+        print(results)
+        return results
+
+    def getResults(self,h,seaDensity):
+        tsStart = time.perf_counter()
+        results = []
+        fvs = self.mesh.fv_indices().tolist()
+        points = self.mesh.points().tolist()
+        xmf = 50
+        # h=9
+        bcwl = self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs,points)
+        h = bcwl[0]
+        volume = bcwl[1]
+        area = bcwl[2]
+        Xwl = bcwl[3]
+        KBz = bcwl[4]
+        KBx = bcwl[5]
+        Ib = bcwl[6]
+        Il = bcwl[7]
+        Lwl,Bwl = self.getLwlBwl(h,fvs,points)
+        mfarea = self.getMainFrameArea(xmf, h, fvs, points)
+        hsdata = self.getHydrostaticData(seaDensity,h,volume,area,Ib,Il,KBz,Lwl,2*Bwl,mfarea)
         dtAll = time.perf_counter() - tsStart
         print("Hydrostatic results calc time:", dtAll)
         results = bcwl+hsdata
@@ -188,6 +213,24 @@ class HullForm(Geometry):
         MlB = Il / volume
         KMl = MlB + KBz
         JZ = 0.01 * area * seaDensity
+        M1 = Il / Lwl
+        delta = volume / seaDensity
+
+        Cwl = area / (Lwl * Bwl)
+        CB = volume / (Lwl * Bwl * h)
+
+        CP = volume / (mfarea * Lwl)
+        CX = mfarea / (Bwl * h)
+        # results = [MoB,KMo,MlB,KMl,JZ,Cwl,CB,CP,CX]
+        return KMo, KMl, JZ, M1, delta, Cwl, CB, CP, CX
+
+    def getHydrostaticDataOld(self,seaDensity,h,volume,area,Ib, Il, KBz,Lwl,Bwl,mfarea):
+
+        MoB = Ib / volume
+        KMo = MoB + KBz
+        MlB = Il / volume
+        KMl = MlB + KBz
+        JZ = 0.01 * area * seaDensity
 
         Cwl = area / (Lwl * Bwl)
         CB = volume / (Lwl * Bwl * h)
@@ -208,7 +251,169 @@ class HullForm(Geometry):
         Lwl = wlpoints[-1][0] - wlpoints[0][0]
         return Lwl, Bwl
 
-    def getBasicDataUsingTrianglesProjectedToWaterline(self,h,x,fvs,points):
+    def getBasicDataUsingTrianglesProjectedToWaterline(self, h, x, fvs, points):
+        mesh = self.mesh
+        lpowl = []
+        lpbwl = []
+        Ib = 0
+        KBz = 0
+        KBx = 0
+        vol = 0
+        Awl = 0
+        Xwl = 0
+        p = []
+        r = []
+        cgTriaMid = []
+        a = self.getXwl(h)
+        for fh in fvs:  # facet handle
+            p.clear()
+            r.clear()
+            cgTriaMid.clear()
+            lpowl.clear()
+            lpbwl.clear()
+            i = 0
+            for vh in fh:  # vertex handle
+                p.append(points[vh])
+                if p[i][2] > h:
+                    lpowl.append(i)
+
+                else:
+                    lpbwl.append(i)
+                i = i + 1
+            if len(lpowl) < 1:
+                # A
+                # Ax = points[fvs[fh][0]][0]
+                Ax = p[0][0]
+                Ay = p[0][1]
+                Az = p[0][2]
+                # B
+                Bx = p[1][0]
+                By = p[1][1]
+                Bz = p[1][2]
+                # C
+                Cx = p[2][0]
+                Cy = p[2][1]
+                Cz = p[2][2]
+                areaXYPlane = self.calcArea2DTria(Ax, Ay, Bx, By, Cx, Cy)
+
+                # Volume
+                hA = h - Az
+                hB = h - Bz
+                hC = h - Cz
+                vol = vol + 1 / 3 * abs(areaXYPlane) * (hA + hB + hC)
+
+                # Ib Il
+                r.append(self.TezisteTrokuta(Ax, Ay, h, Bx, By, h, Cx, Cy, h))
+                Ib = Ib + r[0][1] ** 2 * areaXYPlane
+
+                # Kbz, KBx
+                hsr = (Az + Bz + Cz) / 3
+                cgTriaMid.append(self.TezisteTrokuta(Ax, Ay, (h - hsr), Bx, By, (h - hsr), Cx, Cy, (h - hsr)))
+                KBz = KBz + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (
+                        hsr + (h - hsr) / 2)
+                KBx = KBx + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (
+                    cgTriaMid[0][0])
+
+                # Awl
+                area = self.calcArea2DTria(Ax, Ay, Bx, By, Cx, Cy)
+
+                # Xwl
+                Xwl = Xwl + (r[0][0] * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))))
+
+                pass
+            elif len(lpowl) == 1:
+                # 2 trokuta Ib, Il i Xwl
+                lip = self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]], h, 2)
+                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0],
+                                             p[lpbwl[1]][1], h))
+                Ib = Ib + r[0][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
+                                                             p[lpbwl[1]][1])
+
+                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
+                                                          p[lpbwl[1]][1])
+
+                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0],
+                                             p[lpbwl[0]][1], h))
+                Ib = Ib + r[1][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1],
+                                                             p[lpbwl[0]][0], p[lpbwl[0]][1])
+
+                Xwl = Xwl + r[1][0] * self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1],
+                                                          p[lpbwl[0]][0], p[lpbwl[0]][1])
+
+                # Kbz, KBx
+                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
+                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0],
+                                                     p[lpbwl[1]][1], h))
+                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
+                                                p[lpbwl[1]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
+                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
+                                                p[lpbwl[1]][1]) * (h - hsr) * (cgTriaMid[0][0])
+
+                hsr = (lip[0][2] + p[lpbwl[1]][2] + p[lpbwl[0]][2]) / 3
+                cgTriaMid.append(
+                    self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0],
+                                        p[lpbwl[0]][1], h))
+                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0],
+                                                p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
+                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0],
+                                                p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
+
+                # Volume
+                area1 = self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[0]][0], p[lpbwl[0]][1], p[lpbwl[1]][0],
+                                            p[lpbwl[1]][1])
+                area2 = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
+                areaXYPlane = area1 + area2
+                vol = vol + 1 / 3 * (h - p[lpbwl[0]][2] + h - p[lpbwl[1]][2]) * area1
+                vol = vol + 1 / 3 * (h - p[lpbwl[1]][2]) * area2
+
+                # Awl
+                area = area1 + area2
+
+                pass
+            elif len(lpowl) == 2:
+                # 1 trokut Ib, Il
+                lip = self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]], h, 2)
+                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[0]][0],
+                                             p[lpbwl[0]][1], h))
+                Ib = Ib + r[0][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
+                                                             p[lpbwl[0]][1])
+
+                # KBz, KBx
+                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
+                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[0]][0],
+                                                     p[lpbwl[0]][1], h))
+                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
+                                                p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
+                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
+                                                p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
+
+                # Volume
+                areaXYPlane = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
+                                                  p[lpbwl[0]][1])
+                vol = vol + 1 / 3 * (h - p[lpbwl[0]][2]) * areaXYPlane
+
+                # Awl
+                area = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
+
+                # Xwl
+                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
+                                                          p[lpbwl[0]][1])
+
+                pass
+            else:
+                area = 0
+            Awl = Awl + area
+
+        Xwl = Xwl / Awl
+        Il = float(self.getIl(h, Xwl))
+        KBz = KBz / vol
+        KBx = KBx / vol
+        Lwl, Bwl = self.getLwlBwl(h, fvs, points)
+        mfarea = self.getMainFrameArea(x, h, fvs, points)
+
+        return h, 2 * vol, 2 * Awl, Xwl, KBz, KBx, 2 * Ib, 2 * Il
+
+    def getBasicDataUsingTrianglesProjectedToWaterlineOld(self,h,x,fvs,points):
         mesh = self.mesh
         lpowl = []
         lpbwl = []
