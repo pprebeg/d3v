@@ -224,10 +224,12 @@ class DialogHullFormModify(QDialog):
         return button
 
     def regenerateHullFormMesh(self):
+        for key,txt in self.shipdatatxt.items():
+            val = float(txt.text())
+            self.currentHullForm.shipdata[key]=val
+        self.currentHullForm.generateMesh()
+        Signals.get().geometryRebuild.emit(self.currentHullForm)
 
-        #self.currentHullForm.generateMesh()
-        #Signals.get().geometryRebuild.emit(self.currentHullForm)
-        pass
 
     def setCurrentHullForm(self, currentHullForm):
         self.currentHullForm = currentHullForm
@@ -376,7 +378,7 @@ class DialogHullFormHydrostaticCurves(QDialog):
         #self.currentHullForm.getResults(9, 1.025)
         #return
         input_data = []
-        mjerilo = [1,1/95,1/45,1,1/0.2,1,1/480,1/12220,1/0.225,1/15,1/2,1/200,1/90,1/0.009,1/0.006,1/0.007,1/0.008]
+        mjerilo = [1,1/95,1/45,1,1/0.2,1,1/480,1/12220,1/0.30,1/15,1/2,1/200,1/90,1/0.008,1/0.0055,1/0.007,1/0.008]
         maxWL= float(self.txtMaxWL.toPlainText())
         stepWL = float(self.txtWLStep.toPlainText())
         h=maxWL
@@ -391,6 +393,7 @@ class DialogHullFormHydrostaticCurves(QDialog):
 
         input_names = ['h', 'Volume', 'Awl', 'Xwl', 'KBz', 'KBx', 'Ib', 'Il',
                        'KMo','KMl','JZ', 'M1','delta','Cwl','CB','CP','CX']
+        colors = ['aqua','maroon','blue','lime','magenta','crimson','blueviolet','orange','orchid','forestgreen','salmon','gold','slategrey','skyblue','greenyellow','moccasin']
         #input_names = ['h', 'Volume', 'Awl']
 #        self.model.layoutAboutToBeChanged()
         self.model.setInputData(input_names, input_data)
@@ -398,8 +401,8 @@ class DialogHullFormHydrostaticCurves(QDialog):
         self.chart.removeAllSeries()
         seriesColorHex = "#000000"
         for i in range(1, len(input_names)):
-            series = QtCharts.QSplineSeries()
-            series.setColor(QColor('darkturquoise'))
+            series = QtCharts.QLineSeries()
+            series.setColor(QColor(str(colors[i-1])))
             series.setName(input_names[i])
             mapper = QtCharts.QVXYModelMapper(self)
             mapper.setYColumn(0)

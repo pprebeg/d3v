@@ -257,14 +257,24 @@ class DialogHullFormTableChart(QDialog):
     def refreshResults(self):
         #self.currentHUS.getResults(9, 1.025)
         #return
-        input_data = self.currentHUS.model_results['Lusa iteration results'].data
-        input_names = self.currentHUS.model_results['Lusa iteration results'].column_names
+        input_data = self.currentHUS.model_results['Lusa iteration results Sagg'].data
+        input_names = self.currentHUS.model_results['Lusa iteration results Sagg'].column_names
+        input_data2 = self.currentHUS.model_results['Lusa iteration results Hogg'].data
+        input_names2 = self.currentHUS.model_results['Lusa iteration results Hogg'].column_names
+
+        for name in input_names2:
+            input_names.append(name)
+        for i in range(len(input_data)):
+            input_data[i]= input_data[i]+input_data2[i]
+
         self.model.setInputData(input_names, input_data)
         self.chart.removeAllSeries()
         seriesColorHex = "#000000"
+
+
+
         ix=2
         iy=1
-
         series = QtCharts.QLineSeries()
         series.setName(input_names[iy]+ " " + input_names[ix])
         mapper = QtCharts.QVXYModelMapper(self)
@@ -275,10 +285,30 @@ class DialogHullFormTableChart(QDialog):
         self.chart.addSeries(series)
             # get the color of the series and use it for showing the mapped area
         seriesColorHex = "{}".format(series.pen().color().name())
-        self.model.add_mapping(seriesColorHex, QRect(iy, 0, 1, self.model.rowCount()))
-        self.model.add_mapping(seriesColorHex, QRect(ix, 0, 1, self.model.rowCount()))
+        self.model.add_mapping(seriesColorHex, QRect(iy, 0, 2, self.model.rowCount()))
+
+        ix = 6
+        iy = 5
+        series = QtCharts.QLineSeries()
+        series.setName(input_names[iy] + " " + input_names[ix])
+        mapper = QtCharts.QVXYModelMapper(self)
+        mapper.setXColumn(ix)
+        mapper.setYColumn(iy)
+        mapper.setSeries(series)
+        mapper.setModel(self.model)
+        self.chart.addSeries(series)
+        # get the color of the series and use it for showing the mapped area
+        seriesColorHex = "{}".format(series.pen().color().name())
+        self.model.add_mapping(seriesColorHex, QRect(iy, 0, 2, self.model.rowCount()))
 
         self.chart.createDefaultAxes()
+
+        axX=(self.chart.axes(Qt.Horizontal))[0]
+        axX.setTitleText("Ime x")
+        axY = (self.chart.axes(Qt.Vertical))[0]
+        axY.setTitleText("Ime Y")
+
+
 
 
     def setCurrentHUS(self, currentHUS):

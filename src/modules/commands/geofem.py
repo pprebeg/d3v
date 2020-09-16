@@ -9,14 +9,13 @@ class ViewType(Enum):
     ViewType
     """
 
-    solid = 0
-    eltype = 1
-    propplate = 2
-    propbeam = 3
+    constant_color = 0
+    face_colors = 1
+    face_vertex_colors = 2
 
 class MeshControl():
     def __init__(self):
-        self.viewtype=ViewType.solid
+        self.viewtype=ViewType.constant_color
         self.useviewtreshold=False
         self.uppertreshold=0
         self.lowertreshold = 0
@@ -123,12 +122,29 @@ class Element(GeoEntity):
         val= result.get(self.id)
         return val
 
+    def getColorForFaceResult(self,fun_getcolor, minvalue, maxvalue):
+        # define color
+
+        if fun_getcolor != None:
+            color = fun_getcolor(self.face_value, minvalue, maxvalue)
+        else:
+            color=[]
+        return color
+
+    def getColorForFaceVertexResult(self,fun_getcolor, minvalue, maxvalue):
+        # define color
+        colors = []
+        if fun_getcolor != None:
+            for i in range(len(self.vertex_based_values)):
+                colors.append(self.vertex_based_values[i], minvalue, maxvalue)
+
     def addNode(self,node):
         self.nodes.append(node)
         self.vertex_based_values.append(0)
     def init(self,id):
         super().init(id)
-    def updateMesh(self,mesh:om.TriMesh,mc:MeshControl):
+    def updateMesh(self,mesh:om.TriMesh,mc:MeshControl, const_color = [0.4, 1.0, 1.0, 1.0],
+                   fun_getcolor=None,minvalue = 0,maxvalue = 1 ):
         pass
 
     def onTPLValue(self):
@@ -151,20 +167,12 @@ class BeamElement(Element):
         self.face_value = self.property.tw
         return self.face_value
 
-    def updateMesh(self,mesh:om.TriMesh,mc:MeshControl):
-        print("čvor 1")
-        # print(self.nodes[0].p)
-        # print(self.nodes[0].p[0])
-        # print(self.nodes[0].p[1])
-        # print(self.nodes[0].p[2])
-        # print("čvor 1a")
-        # print(self.nodes[0].p[0])
-        # print(self.nodes[0].p[1])
-        # print(self.nodes[0].p[2]-1)
-        # print("čvor 2")
-        # print(self.nodes[1].p)
-
+    def updateMesh(self,mesh:om.TriMesh,mc:MeshControl, const_color = [0.4, 1.0, 1.0, 1.0],
+                   fun_getcolor=None,minvalue = 0,maxvalue = 1 ):
+        color = const_color
         vhandle = []
+        handleColorIndex = []
+        fhs = []
 
         hw=self.property.hw
         tw=self.property.tw
@@ -174,91 +182,49 @@ class BeamElement(Element):
         y = self.wo
         v = np.cross(x, y)
         # z = self.nodes[0].p + self.wo*hw - (v*bf*0.5)
-        print(self.nodes[0].p)
-        print("x")
-        print(x)
-        # print("y")
-        # print(y)
-        print("v")
-        print(v)
-        print("wo")
-        print(self.wo)
-        print("hw")
-        print(hw)
-        print("wo*hw")
-        print(self.wo*hw)
-        # print("z")
-        # print(z)
-
-
-
-
-
 
         vhandle.append(mesh.add_vertex(self.nodes[0].p)) #0 točka 1
+        handleColorIndex.append(0)
         vhandle.append(mesh.add_vertex(self.nodes[1].p)) #1 točka 2
-
+        handleColorIndex.append(1)
 
         data = self.nodes[0].p + self.wo*hw  #2 točka 3
         vhandle.append(mesh.add_vertex(data))
+        handleColorIndex.append(0)
         data = self.nodes[1].p + self.wo * hw  # 3 točka 4
         vhandle.append(mesh.add_vertex(data))
+        handleColorIndex.append(1)
         data = self.nodes[0].p + self.wo*hw - (v*bf*0.5)  #4 točka 5
         vhandle.append(mesh.add_vertex(data))
+        handleColorIndex.append(0)
         data = self.nodes[1].p + self.wo*hw - (v*bf*0.5)  #5 točka 6
         vhandle.append(mesh.add_vertex(data))
+        handleColorIndex.append(1)
         data = self.nodes[1].p + self.wo*hw + (v*bf*0.5)  #6 točka 7
         vhandle.append(mesh.add_vertex(data))
+        handleColorIndex.append(1)
         data = self.nodes[0].p + self.wo*hw + (v*bf*0.5)  #7 točka 8
         vhandle.append(mesh.add_vertex(data))
+        handleColorIndex.append(0)
 
         # data = np.array([self.nodes[0].p]) + np.array(self.wo)*self.hw - np.cross(np.array([self.nodes[1].p]),np.array(self.wo))*(self.bf*0.5) #4 točak 5
         # vhandle.append(mesh.add_vertex(data))
 
-        fh0 = mesh.add_face(vhandle[0], vhandle[1], vhandle[2]) #1-2-3
-        fh1 = mesh.add_face(vhandle[2], vhandle[1], vhandle[3]) #3-2-4
-        fh1 = mesh.add_face(vhandle[4], vhandle[5], vhandle[6]) #5-6-7
-        fh1 = mesh.add_face(vhandle[4], vhandle[6], vhandle[7])  # 5-7-8
+        fhs.append(mesh.add_face(vhandle[0], vhandle[1], vhandle[2])) #1-2-3
+        fhs.append(mesh.add_face(vhandle[2], vhandle[1], vhandle[3])) #3-2-4
+        fhs.append(mesh.add_face(vhandle[4], vhandle[5], vhandle[6])) #5-6-7
+        fhs.append(mesh.add_face(vhandle[4], vhandle[6], vhandle[7])) # 5-7-8
 
-
-
-        # ###TEST S RUCNIM UNOSOM TOCAKA###
-        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2]]) #0 točka 1
-        # vhandle.append(mesh.add_vertex(data))
-        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1], self.nodes[1].p[2]]) #1 točka 2
-        # vhandle.append(mesh.add_vertex(data))
-        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1], self.nodes[1].p[2]-1]) #2 točka 3
-        # vhandle.append(mesh.add_vertex(data))
-        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2]-1]) #3 točak 4
-        # vhandle.append(mesh.add_vertex(data))
-        #
-        #
-        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1]-0.25, self.nodes[1].p[2]-1]) #4 točka 5
-        # vhandle.append(mesh.add_vertex(data))
-        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1]-0.25, self.nodes[0].p[2]-1]) #5 točak 6
-        # vhandle.append(mesh.add_vertex(data))
-        #
-        #
-        # data = np.array([self.nodes[1].p[0], self.nodes[1].p[1]+0.25, self.nodes[1].p[2]-1]) #6 točka 7
-        # vhandle.append(mesh.add_vertex(data))
-        # data = np.array([self.nodes[0].p[0], self.nodes[0].p[1]+0.25, self.nodes[0].p[2]-1]) #8 točak 7
-        # vhandle.append(mesh.add_vertex(data))
-        #
-        #
-        # fh0 = mesh.add_face(vhandle[0], vhandle[1], vhandle[2]) #1-2-3
-        # fh1 = mesh.add_face(vhandle[0], vhandle[2], vhandle[3]) #1-3-4
-        #
-        # ####NERADI S 4 trokutra jer dolazi da moramo po treci puta prolaziti po istom pravcu
-        # # fh2 = mesh.add_face(vhandle[3], vhandle[2], vhandle[4]) #4-3-5
-        # # fh3 = mesh.add_face(vhandle[3], vhandle[4], vhandle[5]) #4-5-6
-        # # fh4 = mesh.add_face(vhandle[3], vhandle[2], vhandle[6])  # 4-3-7
-        # # fh5 = mesh.add_face(vhandle[3], vhandle[6], vhandle[7])  # 4-7-8
-        #
-        # fh2 = mesh.add_face(vhandle[4], vhandle[5], vhandle[7]) #5-6-8
-        # fh3 = mesh.add_face(vhandle[4], vhandle[7], vhandle[6]) #5-8-7
-
-
-        pass
+        # define color
+        if fun_getcolor != None:
+            if mc.viewtype == ViewType.face_colors:
+                color = self.getColorForFaceResult(fun_getcolor, minvalue, maxvalue)
+                for fh in fhs:
+                    mesh.set_color(fh, color)
+            if mc.viewtype == ViewType.face_colors:
+                colors = self.getColorForFaceVertexResult(fun_getcolor, minvalue, maxvalue)
+                for ivh in range(len(vhandle)):
+                    mesh.set_color(vhandle[ivh], color[handleColorIndex[ivh]])
 
 class TriaElement(Element):
     def __init__(self):
@@ -297,23 +263,12 @@ class StiffQuadElement(QuadElement):
         pass
     def init(self,id):
         self.id=id
-    def updateMesh(self, mesh: om.TriMesh, mc: MeshControl):
-        # print(self.nodes[0].x(),self.nodes[0].y(),self.nodes[0].z())
-        # print(self.nodes[1].x(], self.nodes[1].y(], self.nodes[1].z())
-        # print(self.nodes[2].x(], self.nodes[2].y(], self.nodes[2].z())
-        # print(self.nodes[3].x(], self.nodes[3].y(], self.nodes[3].z())
-        # print(self.nodes[4].x(], self.nodes[4].y(], self.nodes[4].z())
-        # print(self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2], "Ivan")
-        # print("čvor 1")
-        # print(self.nodes[0].p)
-        # print("čvor 2")
-        # print(self.nodes[1].p)
-        # print("čvor 3")
-        # print(self.nodes[2].p)
-        # print("čvor 4")
-        # print(self.nodes[3].p)
-        # mesh = om.TriMesh()
+    def updateMesh(self,mesh:om.TriMesh,mc:MeshControl, const_color = [0.4, 1.0, 1.0, 1.0],
+                   fun_getcolor=None,minvalue = 0,maxvalue = 1 ):
+
+        color = const_color
         vhandle = []
+        fhs = []
         data = np.array([self.nodes[0].p[0], self.nodes[0].p[1], self.nodes[0].p[2]])
         vhandle.append(mesh.add_vertex(data))
         data = np.array([self.nodes[1].p[0], self.nodes[1].p[1], self.nodes[1].p[2]])
@@ -323,10 +278,21 @@ class StiffQuadElement(QuadElement):
         data = np.array([self.nodes[3].p[0], self.nodes[3].p[1], self.nodes[3].p[2]])
         vhandle.append(mesh.add_vertex(data))
 
-        fh0 = mesh.add_face(vhandle[0], vhandle[1], vhandle[2])
-        fh1 = mesh.add_face(vhandle[0], vhandle[2], vhandle[3])
-        # return mesh
-        # pass
+        fhs.append(mesh.add_face(vhandle[0], vhandle[1], vhandle[2]))
+        fhs.append(mesh.add_face(vhandle[0], vhandle[2], vhandle[3]))
+
+        # define color
+        if fun_getcolor != None:
+            if mc.viewtype == ViewType.face_colors:
+                color =self.getColorForFaceResult(fun_getcolor, minvalue, maxvalue)
+                for fh in fhs:
+                    mesh.set_color(fh, color)
+            if mc.viewtype == ViewType.face_colors:
+                colors =self.getColorForFaceVertexResult(fun_getcolor, minvalue, maxvalue)
+                for ivh in range(len(vhandle)):
+                    mesh.set_color(vhandle[ivh], color[ivh])
+
+
 
 
 class Units():
@@ -414,6 +380,12 @@ class GeoFEM(Geometry):
         self.populateAtribValFunctionsDictionary()
         self.minValue=0
         self.maxValue=0
+
+        self.drawLegend = False
+        self.legendValues = []
+        self.legendColors = []
+        self.legendTitle = ""
+
         pass
 
     def prepareModelForVisualization(self,key):
@@ -427,6 +399,41 @@ class GeoFEM(Geometry):
             fatrib()
 
 
+    def getContinuousColor(self, v, vmin, vmax):
+        color = [1.0, 1.0, 1.0, 1.0]
+        if v < vmin:
+            v = vmin
+        if v > vmax:
+            v = vmax
+        dv = vmax - vmin
+
+        if (v < (vmin + 0.25 * dv)):
+            color[0] = 0
+            color[1] = 4 * (v - vmin) / dv
+        elif (v < (vmin + 0.5 * dv)):
+            color[0] = 0
+            color[2] = 1 + 4 * (vmin + 0.25 * dv - v) / dv
+        elif (v < (vmin + 0.75 * dv)):
+            color[0] = 4 * (v - vmin - 0.5 * dv) / dv
+            color[2] = 0
+        else:
+            color[1] = 1 + 4 * (vmin + 0.75 * dv - v) / dv
+            color[2] = 0
+        return color
+
+
+    def prepContColorLegend(self,fun_getcolor,minVal, maxVal,nColor):
+        self.legendValues.clear()
+        self.legendColors.clear()
+        self.drawLegend = True
+        legendValues=np.linspace(minVal,maxVal,nColor)
+        for x in legendValues:
+            self.legendValues.append(f"{x:.4g}")
+        for val in legendValues:
+            color = fun_getcolor(val, minVal, maxVal)
+            self.legendColors.append(color)
+
+    # endregion
     # region Attribute Value Functions
 
     def populateAtribValFunctionsDictionary(self):
@@ -515,9 +522,29 @@ class GeoFEM(Geometry):
 
     def regenerate(self):
         mesh= om.TriMesh()
+
+        self.mc.viewtype = ViewType.constant_color
+        mesh.request_face_colors()
         for el in self.elements.values():
             el.updateMesh(mesh,self.mc)
         pass
+        self.mesh = mesh
+
+    def regenerateusingcolor(self,fun_getcolor):
+        self.prepContColorLegend(fun_getcolor,self.minValue, self.maxValue, 12)
+        mesh= om.TriMesh()
+        if self.mc.viewtype == ViewType.constant_color or self.mc.viewtype == ViewType.face_colors:
+            #mesh.release_vertex_colors()
+            mesh.request_face_colors()
+        elif self.mc.viewtype == ViewType.face_vertex_colors:
+            #mesh.release_face_colors()
+            mesh.request_vertex_colors()
+
+        const_color = [0.4, 1.0, 1.0, 1.0]
+
+        for el in self.elements.values():
+            el.updateMesh(mesh,self.mc, const_color,self.getContinuousColor,self.minValue,self.maxValue)
+
         self.mesh = mesh
     def setResultValuesOnElements(self):
         pass
@@ -670,14 +697,24 @@ class LusaResults(FEMModelResults):
         abspath_hogg = abspath + 'LUSAhogg.OUT'
         abspath_sagg = abspath + 'LUSAsagg.OUT'
 
-        iterationResults = GeneralResultsTableModel('Lusa iteration results')
+        iterationResults = GeneralResultsTableModel('Lusa iteration results Sagg')
         self.modres[iterationResults.name]=iterationResults
-        iterationResults.appendName('CycleNo')
-        iterationResults.appendName('Moment, kNm')
-        iterationResults.appendName('Curvature, 1/m')
-        iterationResults.appendName('y_NA, m')
+
+
+        iterationResults.appendName('CycleNo Sagg')
+        iterationResults.appendName('Moment Sagg, kNm')
+        iterationResults.appendName('Curvature Sagg, 1/m')
+        iterationResults.appendName('y_NA Sagg, m')
 
         self.readMainLusaFile(abspath_sagg,True,iterationResults)
+
+        iterationResults = GeneralResultsTableModel('Lusa iteration results Hogg')
+        self.modres[iterationResults.name] = iterationResults
+        iterationResults.appendName('CycleNo Hogg')
+        iterationResults.appendName('Moment Hogg, kNm')
+        iterationResults.appendName('Curvature Hogg, 1/m')
+        iterationResults.appendName('y_NA Hogg, m')
+
         self.readMainLusaFile(abspath_hogg, False, iterationResults)
 
         pass
@@ -706,8 +743,8 @@ class LusaResults(FEMModelResults):
                 continue
             if 'ULTIMATE CAPACITY IS' in line:
                 f.close()
-                if isSagg:
-                    tableResult.data.reverse()
+#                if isSagg:
+#                    tableResult.data.reverse()
                 return
             sline = line.split(" ")
             if len(sline) == 0:
@@ -722,8 +759,6 @@ class LusaResults(FEMModelResults):
                     tableResult.addRow(rowValues)
 
         f.close()
-        if isSagg:
-            tableResult.data.reverse()
 
     def readCSDFile(self,path,isSagg):
         file=pathlib.Path(path)
