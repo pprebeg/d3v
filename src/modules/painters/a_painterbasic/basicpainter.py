@@ -362,7 +362,7 @@ class BasicPainter(Painter):
                 useMeshColor = False
             else:
                 c = [0.4, 1.0, 1.0, 1.0]  # default color
-        elif useMeshColor and mesh.has_face_colors():
+        if useMeshColor and mesh.has_face_colors():
             ar_face_colors = mesh.face_colors()
             cstype = 1
         elif useMeshColor and mesh.has_vertex_colors():
@@ -388,7 +388,6 @@ class BasicPainter(Painter):
             n=ar_face_normals[ifh]
             if cstype == 1:
                 c= ar_face_colors[ifh]
-
             for iv in fv:
                 p = ar_points[iv]
                 if cstype == 2:
@@ -398,6 +397,7 @@ class BasicPainter(Painter):
                     pp.append(p)
                     nn.append(n)
                     cc.append(c)
+
 
                 self.appendlistdata_f3xyzf3nf4rgba(key,
                                                    p[0], p[1], p[2],

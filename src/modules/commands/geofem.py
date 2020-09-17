@@ -20,6 +20,10 @@ class MeshControl():
         self.uppertreshold=0
         self.lowertreshold = 0
         pass
+    def getUpperTresholdColor(self):
+        return [0.1,0.1,0.1,1.0]
+    def getLowerTresholdColor(self):
+        return [0.3,0.3,0.3,1.0]
 class Property ():
     def __init__(self):
         self.id = 0
@@ -119,8 +123,8 @@ class Element(GeoEntity):
         pass
 
     def setFaceValueUsingElementID(self,result:dict):
-        val= result.get(self.id)
-        return val
+        self.face_value=result.get(self.id)
+        return self.face_value
 
     def getColorForFaceResult(self,fun_getcolor, minvalue, maxvalue):
         # define color
@@ -136,7 +140,7 @@ class Element(GeoEntity):
         colors = []
         if fun_getcolor != None:
             for i in range(len(self.vertex_based_values)):
-                colors.append(self.vertex_based_values[i], minvalue, maxvalue)
+                colors.append(fun_getcolor(self.vertex_based_values[i], minvalue, maxvalue))
 
     def addNode(self,node):
         self.nodes.append(node)
@@ -149,6 +153,14 @@ class Element(GeoEntity):
 
     def onTPLValue(self):
         self.face_value = 0
+        return self.face_value
+
+    def onMatID(self):
+        self.face_value = self.property.material.id
+        return self.face_value
+
+    def onPropID(self):
+        self.face_value = self.property.id
         return self.face_value
 
 
@@ -221,7 +233,7 @@ class BeamElement(Element):
                 color = self.getColorForFaceResult(fun_getcolor, minvalue, maxvalue)
                 for fh in fhs:
                     mesh.set_color(fh, color)
-            if mc.viewtype == ViewType.face_colors:
+            if mc.viewtype == ViewType.face_vertex_colors:
                 colors = self.getColorForFaceVertexResult(fun_getcolor, minvalue, maxvalue)
                 for ivh in range(len(vhandle)):
                     mesh.set_color(vhandle[ivh], color[handleColorIndex[ivh]])
@@ -287,7 +299,7 @@ class StiffQuadElement(QuadElement):
                 color =self.getColorForFaceResult(fun_getcolor, minvalue, maxvalue)
                 for fh in fhs:
                     mesh.set_color(fh, color)
-            if mc.viewtype == ViewType.face_colors:
+            elif mc.viewtype == ViewType.face_vertex_colors:
                 colors =self.getColorForFaceVertexResult(fun_getcolor, minvalue, maxvalue)
                 for ivh in range(len(vhandle)):
                     mesh.set_color(vhandle[ivh], color[ivh])
@@ -380,27 +392,55 @@ class GeoFEM(Geometry):
         self.populateAtribValFunctionsDictionary()
         self.minValue=0
         self.maxValue=0
+        self.numDiffValues =0
+        self.valueIndexColor = {}
 
         self.drawLegend = False
         self.legendValues = []
         self.legendColors = []
         self.legendTitle = ""
+        self.fixed_color_list = self.initColorList()
+        self.max_fixed_colors= len(self.fixed_color_list)
 
         pass
+    def initColorList(self):
+        colors = [[0, 0, 255,255],[128, 0, 128,255],[222, 184, 135,255],[255, 165, 0,255],[0, 255, 0,255],
+                  [ 0, 128, 0,255],[128, 0, 0,255],[255, 0, 0,255],[255, 192, 203,255],[222, 184, 135,255],
+                  [255, 165, 0,255],[255, 127, 80,255],[128, 128, 0,255],[255, 255, 0,255],[245, 245, 220,255],
+                  [0, 255, 0,255],[ 0, 128, 0,255],[245, 255, 250,255],[0, 128, 128,255],[0, 255, 255,255],
+                  [0, 0, 128,255],[230, 230, 250,255],[255, 0, 255,255],[205, 133, 63,255]]
+        floatColors = []
+        for color in colors:
+            floatColors.append([x / 255 for x in color])
+        return floatColors
 
     def prepareModelForVisualization(self,key):
         self.minValue = float("inf")
         self.maxValue = float("-inf")
+        self.numDiffValues = 0
+        self.valueIndexColor.clear()
+
         fatrib= self.attrib_val_functions.get(key)
 
         if fatrib == None:
             self.doResultValue(key)
         else:
-            fatrib()
-
+            fatrib(key)
+        self.mc.lowertreshold=self.minValue
+        self.mc.uppertreshold=self.maxValue
+        self.mc.viewtype = ViewType.face_colors
+        self.legendTitle=key
+        self.regenerateusingcolor()
 
     def getContinuousColor(self, v, vmin, vmax):
         color = [1.0, 1.0, 1.0, 1.0]
+        if v > self.mc.uppertreshold:
+            return self.mc.getUpperTresholdColor()
+        elif v < self.mc.lowertreshold:
+            return self.mc.getLowerTresholdColor()
+        vmin   = max(vmin,self.mc.lowertreshold)
+        vmax = min(vmax, self.mc.uppertreshold)
+
         if v < vmin:
             v = vmin
         if v > vmax:
@@ -421,16 +461,39 @@ class GeoFEM(Geometry):
             color[2] = 0
         return color
 
+    def getColorFromList(self, v, vmin, vmax):
+        if v > self.mc.uppertreshold:
+            return self.mc.getUpperTresholdColor()
+        elif v < self.mc.lowertreshold:
+            return self.mc.getLowerTresholdColor()
+
+        index=self.getValueColorIndex(v)
+        color = self.fixed_color_list[index]
+        return color
+
 
     def prepContColorLegend(self,fun_getcolor,minVal, maxVal,nColor):
         self.legendValues.clear()
         self.legendColors.clear()
         self.drawLegend = True
+        minVal = max(minVal, self.mc.lowertreshold)
+        maxVal = min(maxVal, self.mc.uppertreshold)
         legendValues=np.linspace(minVal,maxVal,nColor)
         for x in legendValues:
             self.legendValues.append(f"{x:.4g}")
         for val in legendValues:
             color = fun_getcolor(val, minVal, maxVal)
+            self.legendColors.append(color)
+
+    def prepListColorLegend(self,fun_getcolor):
+        self.legendValues.clear()
+        self.legendColors.clear()
+        self.drawLegend = True
+        for key,index in self.valueIndexColor.items():
+            if  key < self.mc.lowertreshold or key > self.mc.uppertreshold:
+                continue
+            self.legendValues.append(f"{key:.4g}")
+            color = fun_getcolor(key, 0, self.numDiffValues)
             self.legendColors.append(color)
 
     # endregion
@@ -445,16 +508,20 @@ class GeoFEM(Geometry):
         self.attrib_val_functions[key] = f
 
     def doTPLValue(self,key):
-        for el in self.elements:
-            val= el.onTPLValue(self)
+        for el in self.elements.values():
+            val= el.onTPLValue()
             self.checkMinMax(val)
 
 
     def doMaterialIDValue(self,key):
-        pass
+        for el in self.elements.values():
+            val = el.onMatID()
+            self.checkMinMax(val)
 
     def doPropertyIDValue(self, key):
-        pass
+        for el in self.elements.values():
+            val = el.onPropID()
+            self.checkMinMax(val)
 
 
     def doResultValue(self,key):
@@ -468,6 +535,17 @@ class GeoFEM(Geometry):
             self.maxValue = val
         if val < self.minValue:
             self.minValue = val
+
+        if self.numDiffValues <= self.max_fixed_colors:
+            index = self.getValueColorIndex(val)
+            if index == None:
+                self.valueIndexColor[val]=self.numDiffValues
+                self.numDiffValues=self.numDiffValues+1
+
+
+    def getValueColorIndex(self,value):
+        return self.valueIndexColor.get(value)
+
 
     def isElementFaceResult(self):
         return self.is_element_result and (not self.is_node_result)
@@ -483,8 +561,8 @@ class GeoFEM(Geometry):
         if result != None:
             self.is_element_result= True
             self.is_node_result = False
-            for el in self.elements:
-                val = el.setFaceValueUsingElementID(result)
+            for key, el in self.elements.items():
+                val = el.setFaceValueUsingElementID(result.feres)
                 self.checkMinMax(val)
             return
 
@@ -524,14 +602,17 @@ class GeoFEM(Geometry):
         mesh= om.TriMesh()
 
         self.mc.viewtype = ViewType.constant_color
-        mesh.request_face_colors()
+       # mesh.request_face_colors()
         for el in self.elements.values():
             el.updateMesh(mesh,self.mc)
         pass
         self.mesh = mesh
 
-    def regenerateusingcolor(self,fun_getcolor):
-        self.prepContColorLegend(fun_getcolor,self.minValue, self.maxValue, 12)
+    def regenerateusingcolor(self):
+        fun_getcolor = self.getColorFromList
+        if self.numDiffValues > self.max_fixed_colors:
+            fun_getcolor= self.getContinuousColor
+
         mesh= om.TriMesh()
         if self.mc.viewtype == ViewType.constant_color or self.mc.viewtype == ViewType.face_colors:
             #mesh.release_vertex_colors()
@@ -543,9 +624,17 @@ class GeoFEM(Geometry):
         const_color = [0.4, 1.0, 1.0, 1.0]
 
         for el in self.elements.values():
-            el.updateMesh(mesh,self.mc, const_color,self.getContinuousColor,self.minValue,self.maxValue)
+            el.updateMesh(mesh,self.mc, const_color,fun_getcolor,self.minValue,self.maxValue)
 
         self.mesh = mesh
+
+        if self.numDiffValues > self.max_fixed_colors:
+            self.prepContColorLegend(fun_getcolor,self.minValue, self.maxValue, 12)
+        else:
+            self.prepListColorLegend(fun_getcolor)
+
+
+
     def setResultValuesOnElements(self):
         pass
 

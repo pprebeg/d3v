@@ -1,4 +1,4 @@
-from PySide2.QtWidgets import QApplication, QMenu, QMessageBox,QFormLayout,QWidget,QHeaderView, QSplitter
+from PySide2.QtWidgets import QApplication, QMenu, QMessageBox,QFormLayout,QWidget,QHeaderView, QSplitter,QLineEdit
 from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout,QVBoxLayout,QHBoxLayout,QTableView,QTextEdit,QLabel
 from commands import Command
 from iohandlers import IOHandler
@@ -12,14 +12,14 @@ from PySide2.QtCore import Slot,Qt,SIGNAL
 from PySide2.QtCore import QAbstractTableModel, QModelIndex, QRect
 from PySide2.QtGui import QColor, QPainter
 from PySide2.QtCharts import QtCharts
-
+from PySide2.QtCore import QObject
 class HUSCommand(Command):
     def __init__(self):
         super().__init__()
         app = QApplication.instance()
         app.registerIOHandler(HullUltStrengthImporter())
         self.mainwin = app.mainFrame
-        self.hf_prop = DialogHullFormModify(self.mainwin)
+        self.hus_meshcontrol = DialogMeshControl(self.mainwin)
         self.hus_TableChart = DialogHullFormTableChart(self.mainwin)
         self.hus=0
         self.si=0
@@ -29,9 +29,8 @@ class HUSCommand(Command):
 
         self.menuMain = QMenu("Ultimate strength")
 
-        self.menuHullFormModify = self.menuMain.addAction("&View Type")
-        self.menuHullFormModify.triggered.connect(self.onModifyForm)
-
+        self.menuViewType = QMenu("&View Type")
+        self.menuMain.addMenu(self.menuViewType)
         self.menuResults = QMenu("&Results")
         self.menuMain.addMenu(self.menuResults)
 
@@ -39,6 +38,9 @@ class HUSCommand(Command):
 
         menuResulMomentCurvatureDiagram = self.menuResults.addAction("Moment- Curvature Diagram")
         menuResulMomentCurvatureDiagram.triggered.connect(self.onShowMomentCurvatureDiagram)
+
+        menuMeshControl = self.menuMain.addAction("View Control")
+        menuMeshControl.triggered.connect(self.onMeshControl)
 
 
 
@@ -51,19 +53,36 @@ class HUSCommand(Command):
         Signals.get().selectionChanged.connect(self.registerSelection)
 
     @Slot()
-    def registerHullForm(self, hullForm):
-        if isinstance(hullForm, HullUltStrength):
-            self.hus=hullForm
+    def registerHullForm(self, hus):
+        if isinstance(hus, HullUltStrength):
+            self.hus=hus
             self.menuMain.setEnabled(True)
+            self.addMenus()
+
+    def addMenus(self):
+        for key,atr in self.hus.attrib_val_functions.items():
+            menuResul = self.menuViewType.addAction(key)
+            menuResul.triggered.connect(self.onColorControlMenu)
+        for key, res in self.hus.element_results.items():
+            menuResul = self.menuResults.addAction(key)
+            menuResul.triggered.connect(self.onColorControlMenu)
+            pass
+    def onColorControlMenu(self):
+        action = QObject.sender(self)
+        key=action.iconText()
+        self.hus.prepareModelForVisualization(key)
+        self.hus_meshcontrol.setCurrentHUS(self.hus)
+        Signals.get().geometryRebuild.emit(self.hus)
+        pass
 
     @Slot()
     def registerSelection(self, si):
         self.si=si
 
-    def onModifyForm(self):
+    def onMeshControl(self):
         if isinstance(self.hus, HullUltStrength):
-            self.hf_prop.setCurrentHullForm(self.hus)
-            self.hf_prop.exec()
+            self.hus_meshcontrol.setCurrentHUS(self.hus)
+            self.hus_meshcontrol.exec()
 
     def onShowMomentCurvatureDiagram(self):
         if isinstance(self.hus, HullUltStrength):
@@ -75,7 +94,6 @@ class HUSCommand(Command):
 class HullUltStrengthImporter(IOHandler):
     def __init__(self):
         super().__init__()
-        Signals.get().importGeometry.connect(self.importGeometry)
 
     def importGeometry(self, fileName):
         if len(fileName) < 1:
@@ -90,16 +108,19 @@ class HullUltStrengthImporter(IOHandler):
         return [".hus"]
 
 
-class DialogHullFormModify(QDialog):
+class DialogMeshControl(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.mainwin = parent
-        self.btnModify = self.createButton("&Modify", self.regenerateHullFormMesh)
 
-        mainLayout = QGridLayout()
-        mainLayout.addWidget(self.btnModify, 0, 0)
-        self.setLayout(mainLayout)
-        self.currentHullForm=0
+
+        self.mainLayout = QVBoxLayout()
+
+        self.setLayout(self.mainLayout)
+        self.currentHUS=0
+        self.mc=0
+        self.txtMCupptresh=0
+        self.txtMClowtresh = 0
 
 
     def createButton(self, text, member):
@@ -107,13 +128,36 @@ class DialogHullFormModify(QDialog):
         button.clicked.connect(member)
         return button
 
-    def regenerateHullFormMesh(self):
-        self.currentHullForm.move(1, 0, 0)
-        Signals.get().geometryRebuild.emit(self.currentHullForm)
+    def applyMeshControl(self):
 
-    def setCurrentHullForm(self, currentHullForm):
-        self.currentHullForm = currentHullForm
-        self.setWindowTitle("Modify Hull Form")
+        self.mc.lowertreshold=float(self.txtMClowtresh.text())
+        self.mc.uppertreshold = float(self.txtMCupptresh.text())
+        self.currentHUS.regenerateusingcolor()
+        Signals.get().geometryRebuild.emit(self.currentHUS)
+
+    def setCurrentHUS(self, currentHUS):
+        self.currentHUS = currentHUS
+        self.mc = currentHUS.mc
+        if len(self.windowTitle()) < 10:
+            self.setWindowTitle("Mesh Control")
+            self.btnModify = self.createButton("&Modify", self.applyMeshControl)
+            self.btnModify.setFixedWidth(50)
+            #self.btnModify.setFixedHeight(20)
+
+            propLayout=QFormLayout()
+            self.mainLayout.addLayout(propLayout)
+            self.mainLayout.addWidget(self.btnModify)
+            self.txtMCupptresh = QLineEdit()
+
+            propLayout.addRow("&Upper treshold:", self.txtMCupptresh)
+
+            self.txtMClowtresh = QLineEdit()
+
+
+            propLayout.addRow("&Lower treshold:", self.txtMClowtresh)
+
+        self.txtMClowtresh.setText(str(self.mc.lowertreshold))
+        self.txtMCupptresh.setText(str(self.mc.uppertreshold))
 
 class CustomTableModel(QAbstractTableModel):
     def __init__(self):

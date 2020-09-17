@@ -375,7 +375,7 @@ class DialogHullFormHydrostaticCurves(QDialog):
         return button
 
     def refreshResults(self):
-        #self.currentHullForm.getResults(9, 1.025)
+        #self.currentHUS.getResults(9, 1.025)
         #return
         input_data = []
         mjerilo = [1,1/95,1/45,1,1/0.2,1,1/480,1/12220,1/0.30,1/15,1/2,1/200,1/90,1/0.008,1/0.0055,1/0.007,1/0.008]

@@ -1,7 +1,5 @@
 from iohandlers import IOHandler
 from signals import Signals
-from geometry import Geometry
-import openmesh as om
 import os
 import numpy as np
 import readxml
