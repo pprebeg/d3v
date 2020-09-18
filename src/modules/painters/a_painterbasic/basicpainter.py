@@ -356,20 +356,18 @@ class BasicPainter(Painter):
         #color data
         cstype=0 # color source type
         useMeshColor = True
+        c = [0.4, 1.0, 1.0, 1.0]  # default color
         if self.selType == 0:
             if self._si.geometry.guid == geometry.guid:
                 c = [1.0, 0.0, 1.0, 1.0]
                 useMeshColor = False
-            else:
-                c = [0.4, 1.0, 1.0, 1.0]  # default color
         if useMeshColor and mesh.has_face_colors():
             ar_face_colors = mesh.face_colors()
             cstype = 1
         elif useMeshColor and mesh.has_vertex_colors():
             ar_vertex_colors = mesh.vertex_colors()
             cstype = 2
-        else:
-            c = [0.4, 1.0, 1.0, 1.0]  # default color
+
 
         #normals data
         if not mesh.has_face_normals(): # normals are necessary for correct lighting effect

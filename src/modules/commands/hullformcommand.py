@@ -58,6 +58,7 @@ class HullFormCommand(Command):
         if isinstance(hullForm, HullForm):
             self.hf=hullForm
             self.menuMain.setEnabled(True)
+            #om.write_mesh("D:\hullForm.obj", hullForm.mesh)
 
     @Slot()
     def registerSelection(self, si):
@@ -87,6 +88,13 @@ class HullFormImporter(IOHandler):
             return
         hf = HullForm(fileName)
         Signals.get().geometryImported.emit(hf)
+
+    def exportGeometry(self, fileName, geometry2export):
+        om.write_mesh(geometry2export.mesh,fileName)
+        pass
+
+    def getExportFormats(self):
+       return (".obj")
 
     def getImportFormats(self):
         return (".huf")
